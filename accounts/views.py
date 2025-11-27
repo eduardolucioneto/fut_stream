@@ -56,7 +56,7 @@ def edit_user_validity(request, user_id):
             messages.success(request, 'Validade do usuário atualizada!')
         else:
             messages.error(request, 'Erro ao atualizar validade.')
-    return redirect('user_list')
+    return redirect('user_create')
 
 @user_passes_test(lambda u: u.is_superuser)
 def edit_user(request, user_id):
@@ -66,7 +66,7 @@ def edit_user(request, user_id):
         if form.is_valid():
             form.save()
             messages.success(request, 'Usuário atualizado com sucesso!')
-            return redirect('user_list')
+            return redirect('user_create')
     else:
         form = AdminUserUpdateForm(instance=user)
     
@@ -78,4 +78,4 @@ def delete_user(request, user_id):
     if request.method == 'POST':
         user.delete()
         messages.success(request, 'Usuário excluído com sucesso!')
-    return redirect('user_list')
+    return redirect('user_create')
