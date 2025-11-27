@@ -1,0 +1,127 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container">
+    <div class="form-card">
+        <h2>Entre em Contato</h2>
+        <p>Tem alguma dúvida, sugestão ou problema? Envie uma mensagem para nós!</p>
+
+        <!-- contact quick links (moved below submit; WhatsApp removed) -->
+
+        {% if success %}
+        <div class="alert-success" role="status">✅ Mensagem enviada com sucesso! Entraremos em contato em breve. <button type="button" aria-label="Fechar mensagem" onclick="this.parentElement.style.display='none'" style="float:right;background:transparent;border:0;font-weight:700;">✕</button></div>
+        {% endif %}
+
+        {% if error %}
+        <div class="alert-error" role="alert">❌ Erro ao enviar mensagem: {{ error }}<br><small>Por enquanto, o email está configurado para modo console (desenvolvimento). Em produção, configure um servidor SMTP.</small> <button type="button" aria-label="Fechar mensagem" onclick="this.parentElement.style.display='none'" style="float:right;background:transparent;border:0;font-weight:700;">✕</button></div>
+        {% endif %}
+
+        <form method="post" id="contactForm" novalidate>
+        {% csrf_token %}
+            <div class="form-row">
+                <div class="form-half">
+                    <label for="name" class="form-label">Nome</label>
+                    <input type="text" id="name" name="name" required class="form-control" placeholder="Seu nome completo" aria-describedby="error-name">
+                    <div id="error-name" class="form-note" aria-live="polite" style="display:none;color:#c53030"></div>
+                </div>
+                <div class="form-half">
+                    <label for="email" class="form-label">Email</label>
+                    <input type="email" id="email" name="email" required class="form-control" placeholder="seu@exemplo.com" aria-describedby="error-email">
+                    <div id="error-email" class="form-note" aria-live="polite" style="display:none;color:#c53030"></div>
+                </div>
+            </div>
+
+            <div style="margin-bottom: 15px;">
+                <label for="subject" class="form-label">Assunto</label>
+                <input type="text" id="subject" name="subject" required class="form-control" placeholder="Sobre o que você quer falar?" aria-describedby="error-subject">
+                <div id="error-subject" class="form-note" aria-live="polite" style="display:none;color:#c53030"></div>
+            </div>
+
+            <div style="margin-bottom: 15px;">
+                <label for="message" class="form-label">Mensagem</label>
+                <textarea id="message" name="message" rows="6" required class="form-control" placeholder="Escreva sua mensagem aqui..." aria-describedby="error-message"></textarea>
+                <div id="error-message" class="form-note" aria-live="polite" style="display:none;color:#c53030"></div>
+            </div>
+
+            <div class="form-actions">
+                <button type="submit" class="btn-primary">Enviar Mensagem</button>
+                <button type="button" class="btn-primary secondary" id="resetBtn">Limpar</button>
+                <div class="form-note" style="margin-left:8px;">Responderemos em até 48 horas úteis.</div>
+            </div>
+            <div class="contact-links vertical" aria-hidden="false">
+                <a class="contact-btn telegram" href="https://t.me/toptraders_example" target="_blank" rel="noopener noreferrer" aria-label="Abrir chat no Telegram (exemplo)">
+                    <!-- Telegram SVG -->
+                    <svg viewBox="0 0 240 240" xmlns="http://www.w3.org/2000/svg" role="img" aria-hidden="true"><circle cx="120" cy="120" r="120" fill="#0088cc"/><path d="M50 120l140-52c4-1 6 1 5 5L170 180c-1 4-4 5-7 3L121 150" fill="#fff"/></svg>
+                    Abrir no Telegram (exemplo)
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+    (function(){
+        const form = document.getElementById('contactForm');
+        const resetBtn = document.getElementById('resetBtn');
+
+        function showError(id, message){
+            const el = document.getElementById(id);
+            if(!el) return;
+            el.style.display = message ? 'block' : 'none';
+            el.textContent = message || '';
+            // try to keep aria-invalid on the associated input if exists (error-id naming convention)
+            const inputId = id.replace('error-','');
+            const input = document.getElementById(inputId);
+            if(input){
+                if(message) input.setAttribute('aria-invalid','true');
+                else input.removeAttribute('aria-invalid');
+            }
+        }
+
+        function validate(){
+            let ok = true;
+            const name = document.getElementById('name');
+            const email = document.getElementById('email');
+            const subject = document.getElementById('subject');
+            const message = document.getElementById('message');
+
+            // name
+            if(!name.value.trim()){ showError('error-name','Por favor, informe seu nome.'); ok=false; } else showError('error-name','');
+
+            // email (simple check)
+            const emailVal = email.value.trim();
+            const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if(!emailVal){ showError('error-email','Por favor, informe um email.'); ok=false; }
+            else if(!emailRe.test(emailVal)){ showError('error-email','Formato de email inválido.'); ok=false; }
+            else showError('error-email','');
+
+            if(!subject.value.trim()){ showError('error-subject','Por favor, informe o assunto.'); ok=false; } else showError('error-subject','');
+
+            if(!message.value.trim()){ showError('error-message','Por favor, escreva sua mensagem.'); ok=false; } else showError('error-message','');
+
+            return ok;
+        }
+
+        form.addEventListener('submit', function(e){
+            // run client validation, but allow server to handle final validation
+            if(!validate()){
+                e.preventDefault();
+                // bring user to first error and focus the associated input
+                const firstError = document.querySelector('.form-note[style*="display:block"]');
+                if(firstError){
+                    const inputId = firstError.id.replace('error-','');
+                    const input = document.getElementById(inputId);
+                    if(input){ input.focus({preventScroll:false}); }
+                    firstError.scrollIntoView({behavior:'smooth', block:'center'});
+                }
+            }
+        });
+
+        resetBtn.addEventListener('click', function(){
+            form.reset();
+            // hide all inline errors
+            ['error-name','error-email','error-subject','error-message'].forEach(id=> showError(id,''));
+        });
+    })();
+</script>
+{% endblock %}

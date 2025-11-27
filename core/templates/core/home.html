@@ -1,0 +1,157 @@
+﻿{% extends 'base.html' %}
+{% load i18n %}
+
+{% block content %}
+<div class="container">
+    <h2>{% trans "Jogos Ao Vivo" %}</h2>
+    {% if live_games %}
+    <ul class="game-list">
+        {% for game in live_games %}
+        <li class="game-item">
+            <div class="game-card">
+                <div class="meta"><span style="color: red; font-weight: bold;"> {% trans "AO VIVO" %}</span> &nbsp; {{ game.date_time|date:'d/m H:i' }}</div>
+                <div class="title">{{ game.title }}</div>
+                <div class="desc">{{ game.team_a }} vs {{ game.team_b }}</div>
+
+                <div style="margin-top: 10px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+                    {% if game.streamroom_set.exists %}
+                    <a href="{% url 'watch_stream' game.id %}"
+                        style="background-color: #28a745; color: white; padding: 5px 10px; text-decoration: none; border-radius: 4px; font-size: 0.9em;">Assistir Agora</a>
+                    {% endif %}
+
+                    {% if user.is_authenticated %}
+                    {% if game.created_by == user or user.can_delete_stream or user.is_staff or user.is_superuser %}
+                    {% if game.streamroom_set.exists %}
+                    <form method="post" action="{% url 'stop_stream' game.streamroom_set.first.id %}"
+                        style="display: inline;">
+                        {% csrf_token %}
+                        <button type="submit" style="background-color: #ffc107; font-size: 0.9em;">Parar Transmissão</button>
+                    </form>
+                    <form method="post" action="{% url 'end_stream' game.streamroom_set.first.id %}"
+                        style="display: inline;">
+                        {% csrf_token %}
+                        <button type="submit" style="background-color: #007bff; font-size: 0.9em;">Finalizar Transmissão</button>
+                    </form>
+                    {% else %}
+
+                    {% if game.created_by == user or user.is_staff or user.is_superuser %}
+                    <form method="post" action="{% url 'start_broadcast' game.id %}" style="display: inline;">
+                        {% csrf_token %}
+                        <button type="submit" style="background-color: #007bff; font-size: 0.9em;">Iniciar Transmissão</button>
+                    </form>
+                    {% endif %}
+                    {% endif %}
+                    <form method="post" action="{% url 'delete_game' game.id %}" style="display: inline;"
+                        onsubmit="return confirm('{% trans " Tem certeza que deseja deletar este jogo?" as msg %}{{
+                        msg|escapejs }}');">
+                        {% csrf_token %}
+                        <button type="submit" style="background-color: #dc3545; font-size: 0.9em;">Deletar Jogo</button>
+                    </form>
+                    {% endif %}
+                    {% endif %}
+                </div>
+            </div>
+        </li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <p>{% trans "Nenhum jogo ao vivo no momento." %}</p>
+    {% endif %}
+
+    <h2 class="section-title">{% trans "Próximos Jogos" %}</h2>
+    {% if upcoming_games %}
+    <ul class="game-list">
+        {% for game in upcoming_games %}
+        <li class="game-item">
+            <div class="game-card">
+                <div class="meta">{{ game.date_time|date:'d/m H:i' }}</div>
+                <div class="title">{{ game.title }}</div>
+                <div class="desc">{{ game.team_a }} vs {{ game.team_b }}</div>
+
+                {% if user.is_authenticated %}
+                <div style="margin-top: 10px; display: flex; gap: 8px; flex-wrap: wrap;">
+                    {% if game.created_by == user or user.is_staff or user.is_superuser %}
+                    <form method="post" action="{% url 'start_broadcast' game.id %}" style="display: inline;">
+                        {% csrf_token %}
+                        <button type="submit" style="background-color: #007bff; font-size: 0.9em;">Iniciar Transmissão</button>
+                    </form>
+                    {% endif %}
+                    {% if game.created_by == user or user.can_delete_stream or user.is_staff or user.is_superuser %}
+                    <form method="post" action="{% url 'delete_game' game.id %}" style="display: inline;"
+                        onsubmit="return confirm('{% trans " Tem certeza que deseja deletar este jogo?" as msg %}{{
+                        msg|escapejs }}');">
+                        {% csrf_token %}
+                        <button type="submit" style="background-color: #dc3545; font-size: 0.9em;">Deletar Jogo</button>
+                    </form>
+                    {% endif %}
+                </div>
+                {% endif %}
+            </div>
+        </li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <ul class="game-list">
+        <li class="game-item">
+            <div class="game-card">
+                <div class="meta">{% trans "Nenhum jogo agendado." %}</div>
+            </div>
+        </li>
+    </ul>
+    {% endif %}
+
+    <h2 class="section-title">{% trans "Jogos Anteriores" %}</h2>
+    {% if past_games %}
+    <ul class="game-list">
+        {% for game in past_games %}
+        <li class="game-item">
+            <div class="game-card">
+                <div class="meta">{{ game.date_time|date:'d/m H:i' }}</div>
+                <div class="title">{{ game.title }}</div>
+                <div class="desc">{{ game.team_a }} vs {{ game.team_b }} <br><span style="color: gray;">{% trans
+                        "Encerrado" %}</span></div>
+
+                {% if user.is_authenticated %}
+                {% if game.created_by == user or user.can_delete_stream or user.is_staff or user.is_superuser %}
+                <div style="margin-top: 10px;">
+                    <form method="post" action="{% url 'delete_game' game.id %}" style="display: inline;"
+                        onsubmit="return confirm('{% trans " Tem certeza que deseja deletar este jogo?" as msg %}{{
+                        msg|escapejs }}');">
+                        {% csrf_token %}
+                        <button type="submit" style="background-color: #dc3545; font-size: 0.9em;">Deletar Jogo</button>
+                    </form>
+                </div>
+                {% endif %}
+                {% endif %}
+        </li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <ul class="game-list">
+        <li class="game-item">
+            <div class="game-card">
+                <div class="meta">{% trans "Nenhum jogo anterior encontrado." %}</div>
+            </div>
+        </li>
+    </ul>
+    {% endif %}
+
+    {% if user.is_authenticated %}
+        {% if user.can_create_stream or user.is_staff or user.is_superuser %}
+    <ul class="game-list">
+        <li class="game-item">
+            <div class="game-card">
+                <div class="meta">{% trans "Cadastrar Novo Jogo" %}</div>
+                <div class="title" style="font-weight:700;">{% trans "Crie um novo jogo para iniciar uma transmissão" %}
+                </div>
+                <div style="margin-top:10px; display:flex; justify-content:flex-end;">
+                    <a href="{% url 'start_stream' %}" class="button"
+                        style="background-color:#28a745; color:white; padding:8px 10px; border-radius:6px; text-decoration:none;">Cadastrar Jogo</a>
+                </div>
+            </div>
+        </li>
+    </ul>
+        {% endif %}
+    {% endif %}
+</div>
+{% endblock %}

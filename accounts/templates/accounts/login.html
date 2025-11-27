@@ -1,0 +1,62 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container" style="display: flex; justify-content: center; align-items: center; min-height: 60vh;">
+    <div class="form-card" style="max-width: 400px; width: 100%; margin: 0;">
+        <h2 style="text-align: center; margin-bottom: 24px;">Entrar</h2>
+        <form method="post">
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="alert-error">
+                {% for error in form.non_field_errors %}
+                {{ error }}
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            {% for field in form %}
+            <div style="margin-bottom: 16px;">
+                <label for="{{ field.id_for_label }}" class="form-label">{{ field.label }}</label>
+                {{ field }}
+                {% if field.errors %}
+                <div class="field-error">
+                    {% for error in field.errors %}
+                    {{ error }}
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </div>
+            {% endfor %}
+
+            <button type="submit" class="btn-primary"
+                style="width: 100%; margin-top: 12px; font-size: 1.1rem;">Entrar</button>
+        </form>
+        <p class="form-note" style="text-align: center; margin-top: 24px; line-height: 1.4;">
+            Cadastro público está desativado.<br>Para criar uma conta, peça ao administrador do site.
+        </p>
+    </div>
+</div>
+
+<style>
+    /* Apply .form-control styles to the django form widgets inside this card */
+    .form-card input[type="text"],
+    .form-card input[type="password"],
+    .form-card input[type="email"] {
+        width: 100%;
+        box-sizing: border-box;
+        padding: 12px 14px;
+        border: 1px solid #e6e9ed;
+        border-radius: 8px;
+        font-size: 1rem;
+        background: #fff;
+        transition: all .12s ease;
+    }
+
+    .form-card input:focus {
+        outline: none;
+        border-color: #ffd54f;
+        box-shadow: 0 4px 14px rgba(255, 197, 7, 0.14);
+    }
+</style>
+{% endblock %}

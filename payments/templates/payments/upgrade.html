@@ -1,0 +1,24 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container">
+    <h2>Upgrade to Premium</h2>
+    <p>Unlock exclusive features and support the platform!</p>
+
+    <div style="border: 1px solid #ddd; padding: 1rem; margin: 1rem 0; border-radius: 8px;">
+        <h3>Premium Plan</h3>
+        <p><strong>$9.99 / month</strong></p>
+        <ul>
+            <li>Ad-free experience</li>
+            <li>High quality streams</li>
+            <li>Priority support</li>
+        </ul>
+
+        <form method="post">
+            {% csrf_token %}
+            <button type="submit" style="background-color: #28a745; font-size: 1.2rem; padding: 0.8rem 2rem;">Pay
+                Now</button>
+        </form>
+    </div>
+</div>
+{% endblock %}

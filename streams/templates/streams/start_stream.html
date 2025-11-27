@@ -1,0 +1,30 @@
+{% extends 'base.html' %}
+
+
+
+
+{% block content %}
+<div class="container">
+    <h2>Start a Stream</h2>
+    <form method="post">
+        {% csrf_token %}
+        <p>
+            <label for="title">Título da Transmissão:</label><br>
+            <input type="text" id="title" name="title">
+        </p>
+        <p>
+            <label for="team_a">Time A:</label><br>
+            <input type="text" id="team_a" name="team_a">
+        </p>
+        <p>
+            <label for="team_b">Time B:</label><br>
+            <input type="text" id="team_b" name="team_b">
+        </p>
+        <p>
+            <label for="date_time">Data e Horário:</label><br>
+            <input type="datetime-local" id="date_time" name="date_time">
+        </p>
+        <button type="submit">Cadastrar Jogo</button>
+    </form>
+</div>
+{% endblock %}

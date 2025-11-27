@@ -1,0 +1,647 @@
+{% load i18n %}
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TopTraders</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            background-color: #f0f2f5;
+            margin: 0;
+            padding: 0;
+        }
+
+        header {
+            background-color: #1a1a1a;
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 1rem;
+        }
+
+        header a div strong {
+            color: #FFD700;
+            font-size: 1.4rem;
+        }
+
+        /* main nav layout */
+        nav {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .nav-left {
+            display: flex;
+            align-items: center;
+        }
+
+        .brand-link {
+            text-decoration: none;
+            color: inherit;
+            display: flex;
+            align-items: center;
+        }
+
+        .brand {
+            color: #FFD700;
+            font-weight: 800;
+            font-size: 1.25rem;
+            padding: 10px 12px;
+        }
+
+        /* center the nav */
+        .main-nav {
+            flex: 1;
+            display: flex;
+            justify-content: center;
+        }
+
+        .nav-list {
+            list-style: none;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+
+        .nav-item {
+            display: inline-block;
+        }
+
+        .nav-item a {
+            display: inline-block;
+            color: #CFCFCF;
+            padding: 10px 18px;
+            border-radius: 18px;
+            text-decoration: none;
+            font-size: 0.98rem;
+            transition: all .16s ease;
+        }
+
+        .nav-item a:hover {
+            color: #fff;
+            background: rgba(255, 255, 255, 0.04);
+        }
+
+        .nav-item.active a {
+            color: #111;
+            background: linear-gradient(90deg, #ffd54f, #ffca28);
+            box-shadow: 0 6px 14px rgba(0, 0, 0, 0.35);
+        }
+
+        /* right area: user and language */
+        .user-menu {
+            position: relative;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .user-button {
+            background: transparent;
+            border: 0;
+            color: #ddd;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 8px;
+            border-radius: 20px;
+        }
+
+        .user-button:hover {
+            background: rgba(255, 255, 255, 0.02);
+        }
+
+        .user-avatar {
+            width: 32px;
+            height: 32px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            background: linear-gradient(180deg, #ffb300, #ff8f00);
+            color: #111;
+            font-weight: 700;
+        }
+
+        .user-name {
+            color: #ddd;
+            margin-right: 6px;
+            font-weight: 600;
+        }
+
+        nav a,
+        nav span {
+            color: #FFD700;
+            text-decoration: none;
+            margin-left: 1rem;
+            position: relative;
+            padding: 0.5rem 0.8rem;
+            font-size: 1.2rem;
+            border-radius: 4px;
+            transition: background 0.3s, color 0.3s;
+        }
+
+        nav a:first-child {
+            margin-left: 0;
+        }
+
+        nav a:hover {
+            background: rgba(255, 215, 0, 0.2);
+            color: #fff;
+        }
+
+        nav a:not(:last-child)::after {
+            content: "|";
+            margin-left: 1rem;
+            color: #FFD700;
+        }
+
+        .user-menu {
+            position: relative;
+            display: inline-block;
+        }
+
+        .user-menu-content {
+            display: none;
+            position: absolute;
+            background-color: #2a2a2a;
+            min-width: 180px;
+            box-shadow: 0px 8px 16px 0px rgba(0, 0, 0, 0.4);
+            z-index: 1;
+            border-radius: 8px;
+            top: 100%;
+            right: 0;
+            margin-top: 0.5rem;
+        }
+
+        .user-menu-content a {
+            color: #FFD700;
+            padding: 12px 16px;
+            text-decoration: none;
+            display: block;
+            margin: 0;
+            border-radius: 0;
+            transition: background 0.3s;
+        }
+
+        .user-menu-content a:hover {
+            background-color: #3a3a3a;
+        }
+
+        .user-menu-content a::after {
+            content: none !important;
+        }
+
+        .user-menu-content.show {
+            display: block;
+        }
+
+        .user-menu>span {
+            cursor: pointer;
+        }
+
+
+
+        /* Game list cards / separators */
+        .game-list {
+            padding-left: 0;
+            margin: 0 auto 18px auto;
+            max-width: 980px;
+            width: calc(100% - 40px);
+        }
+
+        .game-item {
+            list-style: none;
+            margin: 12px 0;
+        }
+
+        .game-card {
+            background: #ffffff;
+            border-radius: 10px;
+            padding: 14px 18px;
+            box-shadow: 0 6px 18px rgba(0, 0, 0, 0.06);
+            border-left: 6px solid rgba(255, 193, 7, 0.95);
+            border-right: 6px solid rgba(255, 193, 7, 0.65);
+            display: block;
+            width: 100%;
+        }
+
+        .game-card .meta {
+            color: #666;
+            font-size: 0.95rem;
+            margin-bottom: 6px;
+        }
+
+        .game-card .title {
+            font-weight: 700;
+            color: #111;
+            margin-bottom: 4px;
+        }
+
+        /* center section titles and add spacing */
+        .container h2 {
+            text-align: center;
+            margin-top: 4px;
+            margin-bottom: 12px;
+        }
+
+        /* explicit section titles (keeps alignment consistent across sections) */
+        .section-title {
+            text-align: center;
+            margin-top: 20px;
+            margin-bottom: 12px;
+            font-size: 1.4rem;
+        }
+
+        .container h3 {
+            text-align: center;
+            margin-top: 18px;
+        }
+
+        /* create a reusable CTA card for new game */
+        /* Match CTA width with game list so everything aligns */
+        .cta-card {
+            max-width: 980px;
+            margin: 16px auto;
+            background: #fff;
+            padding: 14px 18px;
+            border-radius: 10px;
+            box-shadow: 0 6px 14px rgba(0, 0, 0, 0.06);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+        }
+
+        .cta-card .cta-left {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .cta-card .cta-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        /* Chat page styling */
+        .chat-layout {
+            display: flex;
+            gap: 20px;
+            align-items: flex-start;
+        }
+
+        .chat-column {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .chat-card {
+            background: #ffffff;
+            border-radius: 10px;
+            padding: 12px;
+            box-shadow: 0 6px 18px rgba(0, 0, 0, 0.06);
+            border-left: 6px solid rgba(255, 193, 7, 0.9);
+            border-right: 6px solid rgba(255, 193, 7, 0.6);
+        }
+
+        #chat-box {
+            height: 420px;
+            overflow-y: auto;
+            background: #ffffff;
+            padding: 12px;
+            border-radius: 8px;
+            box-shadow: inset 0 1px 0 rgba(0, 0, 0, 0.02);
+        }
+
+        #online-users-box {
+            height: 420px;
+            overflow-y: auto;
+            background: #ffffff;
+            padding: 12px;
+            border-radius: 8px;
+        }
+
+        .reply-indicator {
+            display: none;
+            background: #f6f7f8;
+            padding: 8px 10px;
+            border-radius: 6px;
+            color: #333;
+        }
+
+        #message-input {
+            flex: 1;
+            padding: 10px;
+            border: 1px solid #e2e6ea;
+            border-radius: 6px 0 0 6px;
+        }
+
+        #send-btn {
+            padding: 10px 18px;
+            border-radius: 0 6px 6px 0;
+            background: linear-gradient(180deg, #1976d2, #0b63c1);
+            color: #fff;
+            border: none;
+            cursor: pointer;
+        }
+
+        .user-list-item {
+            padding: 8px 6px;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .user-list-item:hover {
+            background: rgba(0, 0, 0, 0.03);
+            cursor: pointer;
+        }
+
+        /* Generic form controls (improved) */
+        .form-card {
+            max-width: 980px;
+            margin: 18px auto;
+            background: #fff;
+            padding: 18px;
+            border-radius: 10px;
+            box-shadow: 0 8px 28px rgba(0, 0, 0, 0.08);
+            border-left: 6px solid rgba(255, 193, 7, 0.95);
+            border-right: 6px solid rgba(255, 193, 7, 0.65);
+        }
+
+        .form-card h2 {
+            text-align: center;
+            margin-top: 6px;
+            margin-bottom: 10px;
+            font-size: 1.6rem;
+            color: #111;
+        }
+
+        /* rows / responsive two-column fields */
+        .form-row {
+            display: flex;
+            gap: 12px;
+        }
+
+        .form-half {
+            flex: 1;
+        }
+
+        .form-control {
+            width: 100%;
+            box-sizing: border-box;
+            padding: 12px 14px;
+            border: 1px solid #e6e9ed;
+            border-radius: 8px;
+            font-size: 1rem;
+            background: #fff;
+            transition: all .12s ease;
+        }
+
+        .form-control::placeholder {
+            color: #9aa6b2;
+        }
+
+        .form-control:focus {
+            outline: none;
+            border-color: #ffd54f;
+            box-shadow: 0 4px 14px rgba(255, 197, 7, 0.14);
+        }
+
+        .form-label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 700;
+            color: #222;
+        }
+
+        .form-actions {
+            margin-top: 14px;
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            justify-content: flex-start;
+        }
+
+        /* contact quick links (Telegram) */
+        .contact-links {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            margin-top: 12px;
+        }
+
+        .contact-links.vertical {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 14px;
+            margin-top: 18px;
+        }
+
+        .contact-btn {
+            display: inline-flex;
+            gap: 8px;
+            align-items: center;
+            padding: 8px 12px;
+            border-radius: 8px;
+            text-decoration: none;
+            color: #fff;
+            font-weight: 700;
+            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.08);
+        }
+
+        .contact-btn svg {
+            width: 18px;
+            height: 18px;
+            display: inline-block;
+        }
+
+        .contact-btn.telegram {
+            background: linear-gradient(90deg, #0088cc, #0077b6);
+        }
+
+        /* (WhatsApp button removed) */
+        .btn-primary {
+            background: linear-gradient(180deg, #28a745, #1e7e34);
+            color: white;
+            padding: 10px 18px;
+            border-radius: 8px;
+            border: none;
+            cursor: pointer;
+            display: inline-block;
+        }
+
+        .btn-primary.secondary {
+            background: linear-gradient(180deg, #e0e0e0, #cfcfcf);
+            color: #222;
+        }
+
+        .form-note {
+            color: #6b7280;
+            font-size: 0.92rem;
+            margin-top: 8px;
+        }
+
+        /* inline field errors */
+        .field-error {
+            color: #c53030;
+            font-size: 0.92rem;
+            margin-top: 8px;
+            display: block;
+        }
+
+        .alert-success {
+            background: #dff0d8;
+            color: #155724;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 12px;
+        }
+
+        .alert-error {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 12px;
+        }
+
+        @media (max-width:880px) {
+            .form-row {
+                flex-direction: column;
+            }
+        }
+
+
+
+        h1,
+        h2 {
+            color: #333;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 2rem auto;
+            padding: 0 1rem;
+        }
+
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background-color: #0056b3;
+        }
+    </style>
+</head>
+
+<body>
+    <header>
+        <div class="nav-left">
+            <a href="{% url 'home' %}" class="brand-link" aria-label="TopTraders home">
+                <div class="brand"><strong>TopTraders</strong></div>
+            </a>
+        </div>
+        <nav class="main-nav" role="navigation" aria-label="Main navigation">
+            {% if user.is_authenticated %}
+            <ul class="nav-list">
+                <li class="nav-item {% if request.resolver_match.url_name == 'home' %}active{% endif %}"><a
+                        href="{% url 'home' %}">{% trans "Jogos" %}</a></li>
+                <li class="nav-item {% if request.resolver_match.url_name == 'calculator' %}active{% endif %}"><a
+                        href="{% url 'calculator' %}">{% trans "Ladder" %}</a></li>
+                <li class="nav-item"><a
+                        href="https://aistudio.google.com/apps/drive/1LSuFb05hAKOdiYGsrMFI_fhHz86wyxTP?showPreview=true&showAssistant=true"
+                        target="_blank">{% trans "Previsor" %}</a></li>
+                <li class="nav-item {% if request.resolver_match.url_name == 'contact' %}active{% endif %}"><a
+                        href="{% url 'contact' %}">{% trans "Contato" %}</a></li>
+                <li class="nav-item {% if request.resolver_match.url_name == 'chat_room' %}active{% endif %}"><a
+                        href="{% url 'chat_room' %}">{% trans "Chat" %}</a></li>
+                {% if user.is_superuser %}
+                <li class="nav-item {% if request.resolver_match.url_name == 'user_create' %}active{% endif %}"><a
+                        href="{% url 'user_create' %}">Cadastro de Usuário</a></li>
+                {% endif %}
+            </ul>
+
+            <div class="user-menu">
+                <button class="user-button" aria-haspopup="true" aria-expanded="false">
+                    <span class="user-avatar">{{ user.username|slice:":1"|upper }}</span>
+                    <span class="user-name">{{ user.username }}</span>
+                </button>
+                <div class="user-menu-content">
+                    <a href="{% url 'password_change' %}">{% trans "Alterar Senha" %}</a>
+
+                    {% if user.is_staff %}
+                    <a href="/admin/" class="admin-link">⚙️ Admin</a>
+                    {% endif %}
+                    <a href="{% url 'logout_confirm' %}">{% trans "Sair" %}</a>
+                </div>
+            </div>
+
+            {% else %}
+            <a href="{% url 'contact' %}">{% trans "Contato" %}</a>
+            <a href="{% url 'login' %}">{% trans "Entrar" %}</a>
+            <!-- Cadastro público removido — apenas administradores podem criar contas -->
+            {% endif %}
+
+
+        </nav>
+    </header>
+
+    <main>
+        {% if messages %}
+        <div class="container">
+            {% for message in messages %}
+            <div
+                style="padding: 10px; margin-bottom: 10px; border-radius: 5px; {% if message.tags == 'error' %}background-color: #ffdddd; color: #a00;{% elif message.tags == 'success' %}background-color: #ddffdd; color: #0a0;{% endif %}">
+                {{ message }}
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        {% block content %}
+        {% endblock %}
+    </main>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const userButton = document.querySelector('.user-button');
+            const userMenuContent = document.querySelector('.user-menu-content');
+            const userMenu = document.querySelector('.user-menu');
+
+            if (userButton && userMenuContent) {
+                userButton.addEventListener('click', function (e) {
+                    e.stopPropagation();
+                    const isExpanded = userButton.getAttribute('aria-expanded') === 'true';
+                    userButton.setAttribute('aria-expanded', !isExpanded);
+                    userMenuContent.classList.toggle('show');
+                });
+
+                document.addEventListener('click', function (e) {
+                    if (!userMenu.contains(e.target)) {
+                        userMenuContent.classList.remove('show');
+                        userButton.setAttribute('aria-expanded', 'false');
+                    }
+                });
+            }
+        });
+    </script>
+</body>
+
+</html>

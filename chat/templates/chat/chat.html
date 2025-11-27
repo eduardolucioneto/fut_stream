@@ -1,0 +1,164 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container">
+    <div class="chat-layout">
+        <div class="chat-column" style="flex:3;">
+            <div class="chat-card">
+                <h2>Chat Global</h2>
+                <div id="chat-box" class="chat-area">
+                    <!-- Messages will be loaded here -->
+                </div>
+
+                <div id="reply-indicator" class="reply-indicator">
+                    Falando com <strong id="reply-recipient"></strong> <a href="#" onclick="cancelReply()" style="color: red; margin-left: 10px; text-decoration: none;">✕ Cancelar</a>
+                </div>
+
+                <div style="display:flex; margin-top:10px;">
+                    <input type="text" id="message-input" placeholder="Digite sua mensagem..." />
+                    <button id="send-btn">Enviar</button>
+                </div>
+            </div>
+        </div>
+
+        <div style="flex:1;">
+            <div class="chat-card">
+                <h3>Usuários Online</h3>
+                <p style="font-size:0.9rem; color:#666; margin-top:0;">Clique em um usuário para enviar mensagem privada.</p>
+                <div id="online-users-box" class="online-users-area">
+                    <!-- Online users list -->
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    const chatBox = document.getElementById('chat-box');
+    const onlineUsersBox = document.getElementById('online-users-box');
+    const messageInput = document.getElementById('message-input');
+    const sendBtn = document.getElementById('send-btn');
+    const replyIndicator = document.getElementById('reply-indicator');
+    const replyRecipientSpan = document.getElementById('reply-recipient');
+
+    let currentRecipient = null;
+    const currentUser = "{{ user.username }}";
+
+    function setRecipient(username) {
+        if (username === currentUser) return;
+        currentRecipient = username;
+        replyRecipientSpan.textContent = username;
+        replyIndicator.style.display = 'block';
+        messageInput.focus();
+        messageInput.placeholder = `Mensagem privada para ${username}...`;
+    }
+
+    function cancelReply() {
+        currentRecipient = null;
+        replyIndicator.style.display = 'none';
+        messageInput.placeholder = "Digite sua mensagem...";
+    }
+
+    function loadMessages() {
+        fetch('{% url "message_list" %}')
+            .then(response => response.json())
+            .then(data => {
+                // Update Messages
+                chatBox.innerHTML = '';
+                data.messages.forEach(msg => {
+                    const div = document.createElement('div');
+                    div.style.marginBottom = '5px';
+
+                    let contentHtml = '';
+                    if (msg.is_private) {
+                        div.style.backgroundColor = '#f0f7ff';
+                        div.style.padding = '5px';
+                        div.style.borderRadius = '4px';
+                        if (msg.user === currentUser) {
+                            contentHtml = `<strong>Você</strong> para <strong>${msg.recipient}</strong> <span style="color: #888; font-size: 0.8em;">${msg.timestamp}</span>: ${msg.content}`;
+                        } else {
+                            contentHtml = `<strong>${msg.user}</strong> para <strong>Você</strong> <span style="color: #888; font-size: 0.8em;">${msg.timestamp}</span>: ${msg.content}`;
+                        }
+                    } else {
+                        contentHtml = `<strong>${msg.user}</strong> <span style="color: #888; font-size: 0.8em;">${msg.timestamp}</span>: ${msg.content}`;
+                    }
+
+                    div.innerHTML = contentHtml;
+                    chatBox.appendChild(div);
+                });
+                // Auto scroll to bottom (simple implementation)
+                chatBox.scrollTop = chatBox.scrollHeight;
+
+                // Update Online Users
+                onlineUsersBox.innerHTML = '';
+                if (data.online_users && data.online_users.length > 0) {
+                    const ul = document.createElement('ul');
+                    ul.style.listStyleType = 'none';
+                    ul.style.padding = '0';
+                    data.online_users.forEach(user => {
+                        const li = document.createElement('li');
+                        li.style.padding = '5px 0';
+                        li.style.borderBottom = '1px solid #eee';
+                        li.style.cursor = 'pointer';
+
+                        // Highlight if selected
+                        if (currentRecipient === user.username) {
+                            li.style.backgroundColor = '#e2e6ea';
+                        }
+
+                        li.onclick = () => setRecipient(user.username);
+                        li.innerHTML = `<span style="color: green;">●</span> ${user.username}`;
+
+                        if (user.username === currentUser) {
+                            li.innerHTML += ' (Você)';
+                            li.style.cursor = 'default';
+                            li.onclick = null;
+                        }
+
+                        ul.appendChild(li);
+                    });
+                    onlineUsersBox.appendChild(ul);
+                } else {
+                    onlineUsersBox.innerHTML = '<p style="color: #888;">Ninguém online.</p>';
+                }
+            });
+    }
+
+    function sendMessage() {
+        const content = messageInput.value;
+        if (!content) return;
+
+        const payload = { content: content };
+        if (currentRecipient) {
+            payload.recipient = currentRecipient;
+        }
+
+        fetch('{% url "message_list" %}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token }}'
+            },
+            body: JSON.stringify(payload)
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'ok') {
+                    messageInput.value = '';
+                    loadMessages();
+                }
+            });
+    }
+
+    sendBtn.addEventListener('click', sendMessage);
+    messageInput.addEventListener('keypress', function (e) {
+        if (e.key === 'Enter') {
+            sendMessage();
+        }
+    });
+
+    // Load messages every 2 seconds
+    setInterval(loadMessages, 2000);
+    loadMessages();
+</script>
+{% endblock %}

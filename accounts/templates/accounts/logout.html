@@ -1,0 +1,16 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container" style="display: flex; justify-content: center; align-items: center; min-height: 60vh;">
+    <div class="form-card" style="max-width: 400px; width: 100%; margin: 0; text-align: center;">
+        <h2 style="margin-bottom: 16px;">Sair</h2>
+        <p style="margin-bottom: 24px; font-size: 1.1rem; color: #555;">Deseja realmente sair da sua conta?</p>
+        <form method="post" action="{% url 'logout' %}" style="display: flex; gap: 12px; justify-content: center;">
+            {% csrf_token %}
+            <button type="submit" class="btn-primary" style="flex: 1;">Sair</button>
+            <a href="{% url 'home' %}" class="btn-primary secondary"
+                style="flex: 1; text-decoration: none; display: inline-flex; align-items: center; justify-content: center;">Cancelar</a>
+        </form>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,321 @@
+{% extends 'base.html' %}
+{% load i18n %}
+
+{% block content %}
+<div class="container">
+    <h2>{% trans "Transmissão:" %} {{ stream.game.title }}</h2>
+    <p><strong>{{ stream.game.team_a }}</strong> vs <strong>{{ stream.game.team_b }}</strong></p>
+
+    <div style="margin-bottom: 20px;">
+        <p>{% trans "Status:" %} <span id="status" style="font-weight: bold;">{% trans "Inicializando..." %}</span></p>
+    </div>
+
+    <!-- Video Preview -->
+    <div style="margin: 20px 0;">
+        <video id="localVideo" autoplay playsinline muted
+            style="width: 100%; max-width: 800px; border: 1px solid #ccc; background-color: #000; display: none;"></video>
+    </div>
+
+    <div id="start-share-container" style="margin-bottom: 20px;">
+        <button onclick="startScreenShare()"
+            style="background-color: #007bff; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer;">
+            ▶️ Iniciar Transmissão
+        </button>
+    </div>
+
+    <div id="restart-share-container" style="margin-bottom: 20px; display: none;">
+        <button onclick="startScreenShare()"
+            style="background-color: #28a745; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer;">
+            🔄 Tentar Novamente / Reiniciar
+        </button>
+    </div>
+
+    <div id="controls" style="display: none; margin: 20px 0;">
+        <form method="post" action="{% url 'stop_stream' stream.id %}" style="display: inline;">
+            {% csrf_token %}
+            <button type="submit"
+                style="background-color: #ffc107; color: black; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer;">
+                ⏸️ Parar Transmissão
+            </button>
+        </form>
+        <form method="post" action="{% url 'end_stream' stream.id %}" style="display: inline; margin-left: 10px;">
+            {% csrf_token %}
+            <button type="submit"
+                style="background-color: #dc3545; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer;">
+                ⏹️ Finalizar Transmissão
+            </button>
+        </form>
+    </div>
+
+    <!-- Viewer List -->
+    <div id="viewer-list" style="display: none; margin-top: 30px; border-top: 1px solid #ccc; padding-top: 20px;">
+        <h3>👥 {% trans "Espectadores Conectados" %}</h3>
+        <ul id="viewers" style="list-style: none; padding: 0;">
+            <li style="color: #666; font-style: italic;">{% trans "Aguardando espectadores..." %}</li>
+        </ul>
+    </div>
+</div>
+
+<script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+<script>
+    const streamId = "{{ stream.id }}";
+    const peerId = "futstream_host_" + streamId;
+
+    const peer = new Peer(peerId, {
+        debug: 3,
+        config: {
+            'iceServers': [
+                { urls: 'stun:stun.l.google.com:19302' },
+                { urls: 'stun:stun1.l.google.com:19302' },
+                { urls: 'stun:stun2.l.google.com:19302' },
+                { urls: 'stun:stun3.l.google.com:19302' },
+                { urls: 'stun:stun4.l.google.com:19302' }
+            ]
+        }
+    });
+
+    const statusEl = document.getElementById('status');
+    const videoEl = document.getElementById('localVideo');
+    const startShareContainer = document.getElementById('start-share-container');
+    const restartShareContainer = document.getElementById('restart-share-container');
+    const viewerList = document.getElementById('viewer-list');
+    const controls = document.getElementById('controls');
+
+    let localStream = null;
+    let currentMicStream = null;
+
+    // Map to store viewer info
+    const viewers = {};
+
+    // Handle incoming calls
+    peer.on('call', (call) => {
+        console.log("📞 Received call from " + call.peer);
+
+        if (localStream) {
+            console.log("✅ Answering call with stream");
+            console.log("📹 Video tracks:", localStream.getVideoTracks().length);
+            console.log("🔊 Audio tracks:", localStream.getAudioTracks().length);
+
+            call.answer(localStream);
+            addOrUpdateViewer(call.peer, null);
+
+            call.peerConnection.onconnectionstatechange = () => {
+                const state = call.peerConnection.connectionState;
+                console.log(`🔗 Connection with ${call.peer}: ${state}`);
+
+                if (state === 'connected') {
+                    console.log(`✅ Successfully connected to viewer: ${call.peer}`);
+                } else if (state === 'failed' || state === 'disconnected') {
+                    console.log(`❌ Lost connection with viewer: ${call.peer}`);
+                    removeViewer(call.peer);
+                }
+            };
+
+            call.peerConnection.oniceconnectionstatechange = () => {
+                const state = call.peerConnection.iceConnectionState;
+                console.log(`🧊 ICE with ${call.peer}: ${state}`);
+            };
+
+            call.on('stream', (remoteStream) => {
+                console.log(`📡 Receiving stream from viewer ${call.peer}`);
+            });
+
+            call.on('close', () => {
+                console.log(`🔌 Call closed with ${call.peer}`);
+                removeViewer(call.peer);
+            });
+
+            call.on('error', (err) => {
+                console.error(`❌ Error with ${call.peer}:`, err);
+                removeViewer(call.peer);
+            });
+
+        } else {
+            console.warn("⚠️ Call received but stream not ready yet.");
+            statusEl.innerText = "Viewer tried to connect but stream not ready.";
+        }
+    });
+
+    peer.on('connection', (conn) => {
+        conn.on('data', (data) => {
+            console.log("Received data:", data);
+            if (data.type === 'join' && data.username) {
+                addOrUpdateViewer(conn.peer, data.username);
+            }
+        });
+    });
+
+    peer.on('open', (id) => {
+        console.log("✅ Peer connected:", id);
+        statusEl.innerText = "Pronto para compartilhar";
+    });
+
+    peer.on('error', (err) => {
+        console.error(err);
+        statusEl.innerText = "Error: " + err.type;
+    });
+
+    window.onload = function () {
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.get('auto_start') === 'true') {
+            console.log("Auto-starting screen share...");
+            startScreenShare(true);
+        }
+    };
+
+    async function startScreenShare(isAutoStart = false) {
+        try {
+            // Hide start button, show loading
+            startShareContainer.style.display = 'none';
+            restartShareContainer.style.display = 'none';
+
+            statusEl.innerText = "Aguardando seleção...";
+
+            console.log("🎬 Requesting screen share...");
+
+            const displayStream = await navigator.mediaDevices.getDisplayMedia({
+                video: {
+                    cursor: "always"
+                },
+                systemAudio: "include",
+                audio: {
+                    echoCancellation: false,
+                    noiseSuppression: false,
+                    sampleRate: 44100,
+                    channelCount: 2
+                }
+            });
+
+            console.log("✅ Display stream obtained");
+            console.log("Video tracks:", displayStream.getVideoTracks());
+            console.log("Audio tracks:", displayStream.getAudioTracks());
+
+            // Try to get microphone audio
+            let micStream = null;
+            try {
+                micStream = await navigator.mediaDevices.getUserMedia({
+                    audio: {
+                        echoCancellation: true,
+                        noiseSuppression: true,
+                        autoGainControl: true
+                    }
+                });
+                currentMicStream = micStream;
+                console.log("✅ Microphone stream obtained");
+            } catch (micErr) {
+                console.warn("Microphone not available:", micErr);
+            }
+
+            const audioTracks = displayStream.getAudioTracks();
+            if (micStream) {
+                const micTracks = micStream.getAudioTracks();
+                if (audioTracks.length === 0 && micTracks.length > 0) {
+                    displayStream.addTrack(micTracks[0]);
+                    console.log("Added microphone audio to stream");
+                } else if (audioTracks.length > 0 && micTracks.length > 0) {
+                    console.log("Both system and mic audio available");
+                }
+            }
+
+            localStream = displayStream;
+            videoEl.srcObject = displayStream;
+            videoEl.style.display = 'block';
+            viewerList.style.display = 'block';
+            controls.style.display = 'block';
+
+            const hasAudio = displayStream.getAudioTracks().length > 0;
+            statusEl.innerText = `Broadcasting (Live) ${hasAudio ? '🔊 Com Áudio' : '🔇 Sem Áudio'}`;
+
+            displayStream.getVideoTracks()[0].onended = () => {
+                console.log("⚠️ Video track ended");
+                handleStreamEnd();
+            };
+
+        } catch (err) {
+            console.error("Error sharing screen:", err);
+
+            // Handle auto-start block silently
+            if (isAutoStart && (err.name === 'NotAllowedError' || err.name === 'SecurityError' || err.message.includes('transient activation'))) {
+                console.warn("Auto-start blocked. User interaction required.");
+                startShareContainer.style.display = 'block';
+                statusEl.innerText = "Pronto para compartilhar";
+                return;
+            }
+
+            statusEl.innerText = "Erro ao compartilhar";
+
+            let errorMsg = `Erro: ${err.name}`;
+
+            if (err.name === 'NotAllowedError') {
+                errorMsg = "Você cancelou o compartilhamento ou negou a permissão.";
+            } else if (err.name === 'NotFoundError') {
+                errorMsg = "Nenhuma tela disponível para compartilhar.";
+            }
+
+            alert(errorMsg);
+            restartShareContainer.style.display = 'block';
+        }
+    }
+
+    function handleStreamEnd() {
+        statusEl.innerText = "Stream encerrado";
+
+        if (localStream) {
+            localStream.getTracks().forEach(track => track.stop());
+            localStream = null;
+        }
+
+        if (currentMicStream) {
+            currentMicStream.getTracks().forEach(track => track.stop());
+            currentMicStream = null;
+        }
+
+        videoEl.srcObject = null;
+        videoEl.style.display = 'none';
+
+        // Show restart button
+        restartShareContainer.style.display = 'block';
+    }
+
+    function addOrUpdateViewer(peerId, username) {
+        const list = document.getElementById('viewers');
+        let item = document.getElementById('viewer-' + peerId);
+
+        if (!viewers[peerId]) {
+            viewers[peerId] = { username: username || "Anonymous" };
+        } else if (username) {
+            viewers[peerId].username = username;
+        }
+
+        const displayName = viewers[peerId].username !== "Anonymous" ? viewers[peerId].username : `Viewer (${peerId})`;
+
+        if (!item) {
+            item = document.createElement('li');
+            item.id = 'viewer-' + peerId;
+            list.appendChild(item);
+
+            const waitingMsg = list.querySelector('li:first-child');
+            if (waitingMsg && waitingMsg.innerText === "Waiting for viewers...") {
+                waitingMsg.remove();
+            }
+        }
+
+        item.innerText = "👤 " + displayName;
+    }
+
+    function removeViewer(peerId) {
+        const item = document.getElementById('viewer-' + peerId);
+        if (item) {
+            item.remove();
+        }
+        delete viewers[peerId];
+
+        const list = document.getElementById('viewers');
+        if (list.children.length === 0) {
+            const waitingMsg = document.createElement('li');
+            waitingMsg.innerText = "Waiting for viewers...";
+            list.appendChild(waitingMsg);
+        }
+    }
+</script>
+{% endblock %}

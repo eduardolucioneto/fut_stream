@@ -1,0 +1,90 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container">
+    <div class="form-card">
+        <h2>Usuários Cadastrados</h2>
+        <div style="overflow-x: auto;">
+            <table style="width: 100%; border-collapse: collapse;">
+                <thead>
+                    <tr style="text-align: left; border-bottom: 2px solid #eee;">
+                        <th style="padding: 10px;">Usuário</th>
+                        <th style="padding: 10px;">Email</th>
+                        <th style="padding: 10px;">Celular</th>
+                        <th style="padding: 10px;">Validade Atual</th>
+                        <th style="padding: 10px;">Ações</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for u in users %}
+                    <tr style="border-bottom: 1px solid #eee;">
+                        <td style="padding: 10px;">{{ u.username }}</td>
+                        <td style="padding: 10px;">{{ u.email }}</td>
+                        <td style="padding: 10px;">{{ u.phone|default:"-" }}</td>
+                        <td style="padding: 10px;">
+                            {% if u.valid_until %}
+                            {{ u.valid_until|date:"d/m/Y" }}
+                            {% if u.is_expired %}
+                            <span style="color: red; font-weight: bold; margin-left: 5px;">(Vencido)</span>
+                            {% endif %}
+                            {% else %}
+                            -
+                            {% endif %}
+                        </td>
+                        <td style="padding: 10px;">
+                            <div style="display: flex; gap: 10px; align-items: center;">
+                                <a href="{% url 'edit_user' u.id %}" class="btn-edit">Editar</a>
+                                <form action="{% url 'delete_user' u.id %}" method="post"
+                                    onsubmit="return confirm('Tem certeza que deseja excluir este usuário?');"
+                                    style="margin: 0;">
+                                    {% csrf_token %}
+                                    <button type="submit" class="btn-delete">Deletar</button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<style>
+    .btn-edit {
+        display: inline-block;
+        padding: 6px 12px;
+        font-size: 0.9rem;
+        text-decoration: none;
+        background-color: #2196F3;
+        /* Blue */
+        color: white;
+        border-radius: 4px;
+        transition: background-color 0.2s;
+    }
+
+    .btn-edit:hover {
+        background-color: #1976D2;
+        /* Darker Blue */
+    }
+
+    .btn-delete {
+        display: inline-block;
+        padding: 6px 12px;
+        font-size: 0.9rem;
+        text-decoration: none;
+        background-color: #f44336;
+        /* Red */
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        transition: background-color 0.2s;
+    }
+
+    .btn-delete:hover {
+        background-color: #d32f2f;
+        /* Darker Red */
+    }
+</style>
+{% endblock %}

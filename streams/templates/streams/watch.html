@@ -1,0 +1,234 @@
+{% extends 'base.html' %}
+{% load i18n %}
+
+{% block content %}
+<div class="container">
+    <h2>{{ stream.game.title }}</h2>
+    <p>
+        <strong>{{ stream.game.team_a }}</strong>
+        vs
+        <strong>{{ stream.game.team_b }}</strong>
+    </p>
+
+    <p style="background-color: #f0f0f0; padding: 10px; border-radius: 5px; display: inline-block;">
+        <strong>Streamer:</strong> {{ stream.host.username }}
+    </p>
+
+    <p>
+        {% trans "Status:" %}
+        <span id="status">{% trans "Connecting..." %}</span>
+    </p>
+
+    <!-- Vídeo remoto -->
+    <video id="remoteVideo" autoplay playsinline controls
+        style="width: 100%; max-width: 900px; background-color: #000; border-radius: 8px;">
+    </video>
+</div>
+
+<script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+<script>
+    const streamId = "{{ stream.id }}";
+    const hostPeerId = "futstream_host_" + streamId;
+    const myPeerId = "futstream_viewer_" + Math.floor(Math.random() * 100000);
+
+    const statusEl = document.getElementById('status');
+    const videoEl = document.getElementById('remoteVideo');
+
+    // Botão de tentar reconectar
+    const retryBtn = document.createElement('button');
+    retryBtn.innerText = '🔄 Tentar Reconectar';
+    retryBtn.style.display = "none";
+    retryBtn.style.marginTop = "10px";
+    retryBtn.style.padding = "10px 20px";
+    retryBtn.style.backgroundColor = "#007bff";
+    retryBtn.style.color = "white";
+    retryBtn.style.border = "none";
+    retryBtn.style.borderRadius = "5px";
+    retryBtn.style.cursor = "pointer";
+    retryBtn.onclick = () => {
+        retryBtn.style.display = "none";
+        connectToStream();
+    };
+    statusEl.parentNode.appendChild(retryBtn);
+
+    const peer = new Peer(myPeerId, {
+        debug: 0,
+        config: {
+            'iceServers': [
+                { urls: 'stun:stun.l.google.com:19302' },
+                { urls: 'stun:stun1.l.google.com:19302' },
+                { urls: 'stun:stun2.l.google.com:19302' },
+                { urls: 'stun:stun3.l.google.com:19302' },
+                { urls: 'stun:stun4.l.google.com:19302' }
+            ]
+        }
+    });
+
+    let currentCall = null;
+
+    peer.on('open', (id) => {
+        console.log("✅ My Peer ID: " + id);
+        connectToStream();
+    });
+
+    peer.on('error', (err) => {
+        console.error("❌ Peer Error:", err);
+        statusEl.innerText = "Erro: " + err.type;
+        retryBtn.style.display = "inline-block";
+
+        if (err.type === 'peer-unavailable') {
+            statusEl.innerText = "Stream offline ou host não encontrado.";
+        }
+    });
+
+    function connectToStream() {
+        statusEl.innerText = "Conectando...";
+        retryBtn.style.display = "none";
+        console.log("🔄 Initiating call to " + hostPeerId);
+
+        // Fecha chamada anterior, se existir
+        if (currentCall) {
+            console.log("🔌 Closing previous call");
+            currentCall.close();
+        }
+
+        // Stream mínimo dummy
+        const canvas = document.createElement('canvas');
+        canvas.width = 1;
+        canvas.height = 1;
+        const canvasStream = canvas.captureStream(1);
+
+        const callObj = peer.call(hostPeerId, canvasStream, {
+            metadata: { viewer: true },
+            constraints: {
+                offerToReceiveAudio: true,
+                offerToReceiveVideo: true
+            }
+        });
+
+        if (!callObj) {
+            console.error("❌ Call object creation failed!");
+            statusEl.innerText = "Falha ao conectar";
+            return;
+        }
+
+        currentCall = callObj;
+
+        // Monitor estado da conexão
+        callObj.peerConnection.onconnectionstatechange = () => {
+            const state = callObj.peerConnection.connectionState;
+            console.log("🔗 Connection State: " + state);
+
+            if (state === 'connected') {
+                console.log("✅ WebRTC connection established!");
+            } else if (state === 'failed' || state === 'disconnected') {
+                statusEl.innerText = "Conexão perdida";
+                retryBtn.style.display = "inline-block";
+            }
+        };
+
+        // ICE connection state
+        callObj.peerConnection.oniceconnectionstatechange = () => {
+            const state = callObj.peerConnection.iceConnectionState;
+            console.log("🧊 ICE State: " + state);
+
+            if (state === 'failed' || state === 'disconnected') {
+                statusEl.innerText = "Conexão perdida";
+                retryBtn.style.display = "inline-block";
+            }
+        };
+
+        // Timeout de conexão
+        const connectionTimeout = setTimeout(() => {
+            if (statusEl.innerText === "Conectando...") {
+                statusEl.innerText = "Host não respondeu (Timeout)";
+                retryBtn.style.display = "inline-block";
+                console.warn("⏱️ Connection timed out.");
+            }
+        }, 15000);
+
+        callObj.on('stream', (remoteStream) => {
+            clearTimeout(connectionTimeout);
+            console.log("✅ Received remote stream!");
+            console.log("📹 Video tracks:", remoteStream.getVideoTracks());
+            console.log("🔊 Audio tracks:", remoteStream.getAudioTracks());
+
+            const audioTracks = remoteStream.getAudioTracks();
+            const videoTracks = remoteStream.getVideoTracks();
+            const hasAudio = audioTracks.length > 0;
+            const hasVideo = videoTracks.length > 0;
+
+            if (!hasVideo) {
+                console.error("❌ No video tracks in stream!");
+                statusEl.innerText = "Stream sem vídeo";
+                return;
+            }
+
+            statusEl.innerText = `Ao Vivo ${hasAudio ? '🔊' : '🔇'}`;
+
+            videoEl.srcObject = remoteStream;
+
+            // Tenta tocar com áudio
+            videoEl.muted = false;
+            const playPromise = videoEl.play();
+
+            if (playPromise !== undefined) {
+                playPromise.then(() => {
+                    console.log("✅ Video playing with audio");
+                }).catch(error => {
+                    console.warn("⚠️ Autoplay with audio prevented:", error);
+                    // fallback: mutado
+                    videoEl.muted = true;
+                    videoEl.play().then(() => {
+                        console.log("✅ Video playing (muted fallback)");
+                        statusEl.innerText = "Ao Vivo 🔇 (Clique para ativar áudio)";
+
+                        videoEl.addEventListener('click', () => {
+                            videoEl.muted = false;
+                            statusEl.innerText = "Ao Vivo 🔊";
+                        }, { once: true });
+                    }).catch(e => {
+                        console.error("❌ Autoplay failed completely:", e);
+                        statusEl.innerText = "Clique para iniciar";
+                    });
+                });
+            }
+
+            // Eventos de track
+            remoteStream.getTracks().forEach(track => {
+                track.onended = () => {
+                    console.log(`⚠️ Track ended: ${track.kind}`);
+                    statusEl.innerText = "Stream encerrado";
+                };
+            });
+        });
+
+        callObj.on('close', () => {
+            statusEl.innerText = "Stream encerrado";
+            console.log("🔌 Call closed");
+        });
+
+        callObj.on('error', (err) => {
+            clearTimeout(connectionTimeout);
+            console.error("❌ Call Error:", err);
+            statusEl.innerText = "Erro na chamada";
+            retryBtn.style.display = "inline-block";
+        });
+
+        // Data Connection para presença
+        const conn = peer.connect(hostPeerId);
+
+        conn.on('open', () => {
+            console.log("✅ Data connection opened");
+            conn.send({
+                type: 'join',
+                username: "{{ user.username|escapejs }}"
+            });
+        });
+
+        conn.on('error', (err) => {
+            console.error("❌ Data connection error:", err);
+        });
+    }
+</script>
+{% endblock %}
