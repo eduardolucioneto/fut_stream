@@ -1,4 +1,4 @@
-﻿{% extends 'base.html' %}
+{% extends 'base.html' %}
 {% load i18n %}
 
 {% block content %}
@@ -15,7 +15,7 @@
 
                 <div style="margin-top: 10px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
                     {% if game.streamroom_set.exists %}
-                    <a href="{% url 'watch_stream' game.id %}"
+                    <a href="{% url 'watch_stream' game.id %}" target="_blank" rel="noopener noreferrer"
                         style="background-color: #28a745; color: white; padding: 5px 10px; text-decoration: none; border-radius: 4px; font-size: 0.9em;">Assistir Agora</a>
                     {% endif %}
 

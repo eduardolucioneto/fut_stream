@@ -31,7 +31,7 @@ fut-stream.onrender.com
 2. **Crie um Web Service** conectando ao repositório: `eduardoneto/fut_stream`
 3. **Configure:**
    - Build Command: `./build.sh`
-   - Start Command: `gunicorn fut_stream.wsgi:application`
+   - Start Command: `python manage.py migrate && python create_superuser.py && gunicorn fut_stream.wsgi:application`
    - Instance Type: `Free`
 4. **Adicione as variáveis de ambiente** acima
 5. **Crie um PostgreSQL Database** (Free tier)

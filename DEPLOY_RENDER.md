@@ -37,7 +37,7 @@ Preencha os campos:
 | **Root Directory** | (deixe em branco) |
 | **Runtime** | `Python 3` |
 | **Build Command** | `./build.sh` |
-| **Start Command** | `gunicorn fut_stream.wsgi:application` |
+| **Start Command** | `python manage.py migrate && python create_superuser.py && gunicorn fut_stream.wsgi:application` |
 
 ### 4️⃣ Escolher o Plano
 
