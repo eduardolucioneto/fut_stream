@@ -224,12 +224,13 @@
         }
 
         const peer = new Peer(myPeerId, {
-            debug: 0,
+            debug: 2,
             config: {
                 'iceServers': [
                     { urls: 'stun:stun.l.google.com:19302' },
                     { urls: 'stun:stun1.l.google.com:19302' },
                     { urls: 'stun:stun2.l.google.com:19302' },
+                    { urls: 'stun:stun.cloudflare.com:3478' },
                     { urls: 'stun:openrelay.metered.ca:80' },
                     {
                         urls: 'turn:openrelay.metered.ca:80',
@@ -306,9 +307,11 @@
 
                 if (state === 'connected') {
                     console.log("✅ WebRTC connection established!");
-                } else if (state === 'failed' || state === 'disconnected') {
+                } else if (state === 'failed') {
                     statusEl.innerText = "Conexão perdida";
                     retryBtn.style.display = "inline-flex";
+                } else if (state === 'disconnected') {
+                    console.warn("⚠️ Desconectado temporariamente, aguardando...");
                 }
             };
 
@@ -316,9 +319,11 @@
                 const state = callObj.peerConnection.iceConnectionState;
                 console.log("🧊 ICE State: " + state);
 
-                if (state === 'failed' || state === 'disconnected') {
-                    statusEl.innerText = "Conexão perdida";
+                if (state === 'failed') {
+                    statusEl.innerText = "Conexão perdida (ICE falhou)";
                     retryBtn.style.display = "inline-flex";
+                } else if (state === 'disconnected') {
+                    console.warn("⚠️ ICE desconectado temporariamente, aguardando...");
                 }
             };
 
