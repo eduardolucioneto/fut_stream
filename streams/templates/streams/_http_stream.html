@@ -1,0 +1,5 @@
+{% load static %}
+{{ stream_connection|json_script:'stream-connection' }}
+<div hidden>{% csrf_token %}</div>
+<script src="{% static 'streams/vendor/simplepeer-9.11.1.min.js' %}"></script>
+<script src="{% static 'streams/http-stream.js' %}?v=3"></script>

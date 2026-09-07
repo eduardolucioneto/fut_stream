@@ -1,7 +1,9 @@
 from django.urls import path
 from . import views
+from . import signaling
 
 urlpatterns = [
+    path('signal/<int:stream_id>/', signaling.exchange, name='stream_signal'),
     path('start/', views.start_stream, name='start_stream'),
     path('start-broadcast/<int:game_id>/', views.start_broadcast, name='start_broadcast'),
     path('broadcast/<int:stream_id>/', views.broadcast_room, name='broadcast_room'),

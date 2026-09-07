@@ -4,6 +4,17 @@ from .models import StreamRoom
 from schedule.models import GameEvent
 
 from django.utils import timezone
+from django.conf import settings
+from django.urls import reverse
+from django.http import Http404
+
+
+def connection_context(stream, role):
+    return {'stream': stream, 'stream_connection': {
+        'endpoint': reverse('stream_signal', args=[stream.pk]),
+        'role': role,
+        'iceServers': settings.STREAM_ICE_SERVERS,
+    }}
 
 @login_required
 def start_stream(request):
@@ -69,7 +80,7 @@ def start_broadcast(request, game_id):
 @login_required
 def broadcast_room(request, stream_id):
     stream = get_object_or_404(StreamRoom, id=stream_id, host=request.user)
-    return render(request, 'streams/broadcast.html', {'stream': stream})
+    return render(request, 'streams/broadcast.html', connection_context(stream, 'host'))
 
 @login_required
 def watch_stream(request, game_id):
@@ -78,8 +89,10 @@ def watch_stream(request, game_id):
         return render(request, 'streams/expired.html')
 
     # Find the stream associated with the game
-    stream = get_object_or_404(StreamRoom, game__id=game_id)
-    return render(request, 'streams/watch.html', {'stream': stream})
+    stream = StreamRoom.objects.filter(game__id=game_id, is_live=True).order_by('-started_at', '-pk').first()
+    if stream is None:
+        raise Http404('Transmissao indisponivel.')
+    return render(request, 'streams/watch.html', connection_context(stream, 'viewer'))
 
 @login_required
 def stop_stream(request, stream_id):

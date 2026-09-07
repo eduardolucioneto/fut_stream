@@ -56,154 +56,43 @@
     </div>
 </div>
 
-<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
-{% include 'streams/_peer_signaling.html' %}
+{% include 'streams/_http_stream.html' %}
 <script>
-    const streamId = "{{ stream.id }}";
-    const peerId = "futstream_host_" + streamId;
-
-    const iceServersConfig = [
-                { urls: 'stun:stun.l.google.com:19302' },
-                { urls: 'stun:stun1.l.google.com:19302' },
-                { urls: 'stun:stun2.l.google.com:19302' },
-                { urls: 'stun:stun3.l.google.com:19302' },
-                { urls: 'stun:stun4.l.google.com:19302' },
-                { urls: 'stun:stun.cloudflare.com:3478' },
-                { urls: 'stun:stun.relay.metered.ca:80' },
-                {
-                    urls: 'turn:turn.relay.metered.ca:3478?transport=udp',
-                    username: 'openrelayproject',
-                    credential: 'openrelayproject'
-                },
-                {
-                    urls: 'turn:turn.relay.metered.ca:3478?transport=tcp',
-                    username: 'openrelayproject',
-                    credential: 'openrelayproject'
-                },
-                {
-                    urls: 'turn:turn.relay.metered.ca:443?transport=tcp',
-                    username: 'openrelayproject',
-                    credential: 'openrelayproject'
-                }
-            ];
-
-    const peer = new Peer(peerId, {
-        host: '0.peerjs.com',
-        port: 443,
-        path: '/',
-        secure: true,
-        debug: 3,
-        logFunction: createPeerLogger(message => console.warn(message)),
-        pingInterval: 5000,
-        config: {
-            'iceTransportPolicy': 'all',
-            'iceServers': iceServersConfig
-        }
-    });
-
     const statusEl = document.getElementById('status');
     const videoEl = document.getElementById('localVideo');
     const startShareContainer = document.getElementById('start-share-container');
     const restartShareContainer = document.getElementById('restart-share-container');
     const viewerList = document.getElementById('viewer-list');
     const controls = document.getElementById('controls');
-
     let localStream = null;
     let currentMicStream = null;
-
-    // Map to store viewer info
-    const viewers = {};
-
-    // Handle incoming calls
-    peer.on('call', (call) => {
-        console.log("📞 Received call from " + call.peer);
-
-        if (localStream) {
-            console.log("✅ Answering call with stream");
-            console.log("📹 Video tracks:", localStream.getVideoTracks().length);
-            console.log("🔊 Audio tracks:", localStream.getAudioTracks().length);
-
-            call.answer(localStream);
-            addOrUpdateViewer(call.peer, null);
-            const pc = call.peerConnection;
-
-            pc.addEventListener('connectionstatechange', () => {
-                const state = pc.connectionState;
-                console.log(`🔗 Connection with ${call.peer}: ${state}`);
-
-                if (state === 'connected') {
-                    console.log(`✅ Successfully connected to viewer: ${call.peer}`);
-                } else if (state === 'failed' || state === 'closed') {
-                    console.log(`❌ Lost connection with viewer: ${call.peer}`);
-                    removeViewer(call.peer);
-                }
-            });
-
-            pc.addEventListener('iceconnectionstatechange', () => {
-                const state = pc.iceConnectionState;
-                console.log(`🧊 ICE with ${call.peer}: ${state}`);
-            });
-
-            call.on('stream', (remoteStream) => {
-                console.log(`📡 Receiving stream from viewer ${call.peer}`);
-            });
-
-            call.on('close', () => {
-                console.log(`🔌 Call closed with ${call.peer}`);
-                removeViewer(call.peer);
-            });
-
-            call.on('error', (err) => {
-                console.error(`❌ Error with ${call.peer}:`, err);
-                removeViewer(call.peer);
-            });
-
-        } else {
-            console.warn("⚠️ Call received but stream not ready yet.");
-            call.close();
-        }
-    });
-
-    peer.on('connection', (conn) => {
-        conn.on('data', (data) => {
-            console.log("Received data:", data);
-            if (data.type === 'join' && data.username) {
-                addOrUpdateViewer(conn.peer, data.username);
+    const connection = new HttpStream(JSON.parse(document.getElementById('stream-connection').textContent), {
+        log: message => console.log(message),
+        status(message, connected) { if (!connected) statusEl.innerText = message; },
+        viewers(participants) {
+            const list = document.getElementById('viewers');
+            list.replaceChildren();
+            for (const viewer of participants) {
+                const item = document.createElement('li');
+                item.textContent = viewer.username;
+                list.appendChild(item);
             }
-        });
-    });
-
-    const signaling = attachPeerSignaling(peer, {
-        log: (message) => console.warn(message),
-        onOpen(id) {
-            console.log('Sinalizacao conectada:', id);
-            statusEl.innerText = localStream ? 'Transmitindo ao vivo' : 'Pronto para compartilhar';
-        },
-        onRetry(attempt, max) {
-            statusEl.innerText = `Reconectando sinalizacao (${attempt}/${max})...`;
-        },
-        onUnavailable() {
-            statusEl.innerText = 'Servidor de conexao indisponivel. Recarregue para tentar novamente.';
-        },
-        onError(err) {
-            statusEl.innerText = 'Erro: ' + err.type;
+            if (!participants.length) {
+                const item = document.createElement('li');
+                item.textContent = 'Aguardando espectadores...';
+                list.appendChild(item);
+            }
         }
     });
-
-    window.addEventListener('pagehide', () => {
-        signaling.stop();
-        handleStreamEnd();
-        peer.destroy();
-    });
-
-    window.onload = function () {
-        const urlParams = new URLSearchParams(window.location.search);
-        if (urlParams.get('auto_start') === 'true') {
-            console.log("Auto-starting screen share...");
-            startScreenShare(true);
-        }
+    connection.start();
+    statusEl.innerText = 'Pronto para compartilhar';
+    window.onload = () => {
+        if (new URLSearchParams(window.location.search).get('auto_start') === 'true') startScreenShare(true);
     };
-
+    window.addEventListener('pagehide', () => {
+        connection.stop();
+        handleStreamEnd();
+    });
     async function startScreenShare(isAutoStart = false) {
         try {
             // Hide start button, show loading
@@ -211,6 +100,10 @@
             restartShareContainer.style.display = 'none';
 
             statusEl.innerText = "Aguardando seleção...";
+            if (currentMicStream) {
+                currentMicStream.getTracks().forEach(track => track.stop());
+                currentMicStream = null;
+            }
 
             console.log("🎬 Requesting screen share...");
 
@@ -258,7 +151,10 @@
                 }
             }
 
+            const previousStream = localStream;
+            if (previousStream) previousStream.getTracks().forEach(track => track.stop());
             localStream = displayStream;
+            connection.setStream(displayStream);
             videoEl.srcObject = displayStream;
             videoEl.style.display = 'block';
             viewerList.style.display = 'block';
@@ -269,7 +165,7 @@
 
             displayStream.getVideoTracks()[0].onended = () => {
                 console.log("⚠️ Video track ended");
-                handleStreamEnd();
+                if (localStream === displayStream) handleStreamEnd();
             };
 
         } catch (err) {
@@ -299,6 +195,7 @@
     }
 
     function handleStreamEnd() {
+        connection.setStream(null);
         statusEl.innerText = "Stream encerrado";
 
         if (localStream) {
@@ -318,45 +215,5 @@
         restartShareContainer.style.display = 'block';
     }
 
-    function addOrUpdateViewer(peerId, username) {
-        const list = document.getElementById('viewers');
-        let item = document.getElementById('viewer-' + peerId);
-
-        if (!viewers[peerId]) {
-            viewers[peerId] = { username: username || "Anonymous" };
-        } else if (username) {
-            viewers[peerId].username = username;
-        }
-
-        const displayName = viewers[peerId].username !== "Anonymous" ? viewers[peerId].username : `Viewer (${peerId})`;
-
-        if (!item) {
-            item = document.createElement('li');
-            item.id = 'viewer-' + peerId;
-            list.appendChild(item);
-
-            const waitingMsg = list.querySelector('li:first-child');
-            if (waitingMsg && waitingMsg.innerText === "Waiting for viewers...") {
-                waitingMsg.remove();
-            }
-        }
-
-        item.innerText = "👤 " + displayName;
-    }
-
-    function removeViewer(peerId) {
-        const item = document.getElementById('viewer-' + peerId);
-        if (item) {
-            item.remove();
-        }
-        delete viewers[peerId];
-
-        const list = document.getElementById('viewers');
-        if (list.children.length === 0) {
-            const waitingMsg = document.createElement('li');
-            waitingMsg.innerText = "Waiting for viewers...";
-            list.appendChild(waitingMsg);
-        }
-    }
 </script>
 {% endblock %}
