@@ -57,6 +57,7 @@
 </div>
 
 <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+{% include 'streams/_peer_signaling.html' %}
 <script>
     const streamId = "{{ stream.id }}";
     const peerId = "futstream_host_" + streamId;
@@ -91,8 +92,9 @@
         port: 443,
         path: '/',
         secure: true,
-        debug: 1,
-        pingInterval: 10000,
+        debug: 3,
+        logFunction: createPeerLogger(message => console.warn(message)),
+        pingInterval: 5000,
         config: {
             'iceTransportPolicy': 'all',
             'iceServers': iceServersConfig
@@ -123,32 +125,24 @@
 
             call.answer(localStream);
             addOrUpdateViewer(call.peer, null);
+            const pc = call.peerConnection;
 
-            call.peerConnection.onconnectionstatechange = () => {
-                const state = call.peerConnection.connectionState;
+            pc.addEventListener('connectionstatechange', () => {
+                const state = pc.connectionState;
                 console.log(`🔗 Connection with ${call.peer}: ${state}`);
 
                 if (state === 'connected') {
                     console.log(`✅ Successfully connected to viewer: ${call.peer}`);
-                } else if (state === 'failed' || state === 'disconnected') {
+                } else if (state === 'failed' || state === 'closed') {
                     console.log(`❌ Lost connection with viewer: ${call.peer}`);
                     removeViewer(call.peer);
                 }
-            };
+            });
 
-            call.peerConnection.oniceconnectionstatechange = () => {
-                const state = call.peerConnection.iceConnectionState;
+            pc.addEventListener('iceconnectionstatechange', () => {
+                const state = pc.iceConnectionState;
                 console.log(`🧊 ICE with ${call.peer}: ${state}`);
-
-                if (state === 'failed') {
-                    console.warn(`🧊 ICE failed with ${call.peer}, attempting restart...`);
-                    try {
-                        call.peerConnection.restartIce();
-                    } catch (e) {
-                        console.warn(`⚠️ ICE restart failed with ${call.peer}`);
-                    }
-                }
-            };
+            });
 
             call.on('stream', (remoteStream) => {
                 console.log(`📡 Receiving stream from viewer ${call.peer}`);
@@ -166,7 +160,7 @@
 
         } else {
             console.warn("⚠️ Call received but stream not ready yet.");
-            statusEl.innerText = "Viewer tried to connect but stream not ready.";
+            call.close();
         }
     });
 
@@ -179,39 +173,27 @@
         });
     });
 
-    peer.on('open', (id) => {
-        console.log("✅ Peer connected:", id);
-        if (localStream) {
-            statusEl.innerText = "Transmitindo ao vivo";
-        } else {
-            statusEl.innerText = "Pronto para compartilhar";
+    const signaling = attachPeerSignaling(peer, {
+        log: (message) => console.warn(message),
+        onOpen(id) {
+            console.log('Sinalizacao conectada:', id);
+            statusEl.innerText = localStream ? 'Transmitindo ao vivo' : 'Pronto para compartilhar';
+        },
+        onRetry(attempt, max) {
+            statusEl.innerText = `Reconectando sinalizacao (${attempt}/${max})...`;
+        },
+        onUnavailable() {
+            statusEl.innerText = 'Servidor de conexao indisponivel. Recarregue para tentar novamente.';
+        },
+        onError(err) {
+            statusEl.innerText = 'Erro: ' + err.type;
         }
     });
 
-    peer.on('disconnected', () => {
-        console.warn("⚠️ Desconectado da rede de sinalização. Reconectando...");
-        statusEl.innerText = "Reconectando rede...";
-        if (!peer.destroyed) {
-            setTimeout(() => {
-                if (!peer.destroyed && peer.disconnected) {
-                    peer.reconnect();
-                }
-            }, 3000);
-        }
-    });
-
-    peer.on('error', (err) => {
-        console.error("❌ Host Peer Error:", err);
-        if (err.type === 'network') {
-            statusEl.innerText = "Reconectando sinalização...";
-            setTimeout(() => {
-                if (peer && !peer.destroyed && peer.disconnected) {
-                    peer.reconnect();
-                }
-            }, 3000);
-            return;
-        }
-        statusEl.innerText = "Erro: " + err.type;
+    window.addEventListener('pagehide', () => {
+        signaling.stop();
+        handleStreamEnd();
+        peer.destroy();
     });
 
     window.onload = function () {

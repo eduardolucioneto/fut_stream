@@ -209,6 +209,7 @@
     </main>
 
     <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+    {% include 'streams/_peer_signaling.html' %}
     <script>
         const streamId = "{{ stream.id }}";
         const hostPeerId = "futstream_host_" + streamId;
@@ -225,6 +226,7 @@
             const line = document.createElement('div');
             line.textContent = `[${time}] ${msg}`;
             debugPanel.appendChild(line);
+            if (debugPanel.children.length > 200) debugPanel.firstChild.remove();
             debugPanel.scrollTop = debugPanel.scrollHeight;
             console.log(msg);
         }
@@ -240,8 +242,10 @@
         }
 
         let peer = null;
+        let signaling = null;
         let currentCall = null;
         let reconnectTimer = null;
+        let closingPage = false;
         let iceFailCount = 0;
         let totalRetryCount = 0;
         const MAX_ICE_FAILS = 2;
@@ -292,13 +296,16 @@
                 port: 443,
                 path: '/',
                 secure: true,
-                debug: 1,
-                pingInterval: 10000,
+                debug: 3,
+                logFunction: createPeerLogger(logDebug),
+                pingInterval: 5000,
                 config: getIceConfig()
             };
         }
 
         function initPeer() {
+            if (signaling) signaling.stop();
+            closeCurrentCall();
             if (peer && !peer.destroyed) {
                 try { peer.destroy(); } catch (e) {}
             }
@@ -308,89 +315,99 @@
 
             peer = new Peer(myPeerId, getPeerOptions());
 
-            peer.on('open', (id) => {
-                console.log("✅ Conectado à rede PeerJS com ID:", id);
-                connectToStream();
-            });
-
-            peer.on('disconnected', () => {
-                console.warn("⚠️ Desconectado do servidor de sinalização. Reconectando...");
-                statusEl.innerText = "Reconectando rede...";
-                if (peer && !peer.destroyed) {
-                    clearTimeout(reconnectTimer);
-                    reconnectTimer = setTimeout(() => {
-                        if (peer && !peer.destroyed && peer.disconnected) {
-                            peer.reconnect();
-                        }
-                    }, RETRY_COOLDOWN);
+            signaling = attachPeerSignaling(peer, {
+                log: logDebug,
+                onOpen(id) {
+                    logDebug(`Sinalizacao conectada: ${id}`);
+                    // Reopening signaling must not interrupt an established media connection.
+                    if (!hasConnectedMedia()) {
+                        closeCurrentCall();
+                        connectToStream();
+                    }
+                },
+                onRetry(attempt, max) {
+                    logDebug(`Reconectando sinalizacao (${attempt}/${max})`);
+                    if (!hasConnectedMedia()) statusEl.innerText = `Reconectando rede (${attempt}/${max})...`;
+                },
+                onUnavailable() {
+                    logDebug('Servidor de sinalizacao indisponivel. Verifique a conexao WebSocket com 0.peerjs.com.');
+                    if (!hasConnectedMedia()) statusEl.innerText = 'Servidor de conexao indisponivel';
+                    retryBtn.style.display = 'inline-flex';
+                },
+                onError(err) {
+                    if (err.type === 'peer-unavailable') {
+                        scheduleCallRetry('Transmissao ainda nao iniciada ou offline', false);
+                    } else {
+                        statusEl.innerText = 'Erro: ' + err.type;
+                        retryBtn.style.display = 'inline-flex';
+                    }
                 }
             });
+        }
 
-            peer.on('error', (err) => {
-                console.error("❌ Peer Error:", err);
-                retryBtn.style.display = "inline-flex";
+        function hasConnectedMedia() {
+            const pc = currentCall && currentCall.peerConnection;
+            return !!pc && (pc.connectionState === 'connected' ||
+                ['connected', 'completed'].includes(pc.iceConnectionState));
+        }
 
-                if (err.type === 'network') {
-                    statusEl.innerText = "Reconectando à rede...";
-                    clearTimeout(reconnectTimer);
-                    reconnectTimer = setTimeout(() => {
-                        if (peer && !peer.destroyed) {
-                            if (peer.disconnected) {
-                                peer.reconnect();
-                            } else {
-                                connectToStream();
-                            }
-                        } else {
-                            initPeer();
-                        }
-                    }, RETRY_COOLDOWN);
-                } else if (err.type === 'peer-unavailable') {
-                    statusEl.innerText = "Transmissão ainda não iniciada ou offline";
-                    clearTimeout(reconnectTimer);
-                    reconnectTimer = setTimeout(() => {
-                        if (statusEl.innerText.includes("offline") || statusEl.innerText.includes("não iniciada")) {
-                            connectToStream();
-                        }
-                    }, 5000);
-                } else {
-                    statusEl.innerText = "Erro: " + err.type;
-                }
-            });
+        function closeCurrentCall() {
+            const previous = currentCall;
+            currentCall = null;
+            if (previous) previous.close();
+        }
+
+        function scheduleCallRetry(message, iceFailure = true) {
+            if (closingPage || reconnectTimer !== null || hasConnectedMedia()) return;
+            closeCurrentCall();
+            statusEl.innerText = message;
+            if (totalRetryCount >= MAX_TOTAL_RETRIES) {
+                statusEl.innerText = 'Nao foi possivel conectar o video';
+                retryBtn.style.display = 'inline-flex';
+                return;
+            }
+            totalRetryCount += 1;
+            if (iceFailure && ++iceFailCount >= MAX_ICE_FAILS) relayOnly = true;
+            logDebug(`Nova tentativa de video ${totalRetryCount}/${MAX_TOTAL_RETRIES}; relay=${relayOnly}`);
+            reconnectTimer = setTimeout(() => {
+                reconnectTimer = null;
+                if (peer && peer.open && !peer.disconnected) connectToStream();
+            }, RETRY_COOLDOWN);
         }
 
         function manualRetry() {
             console.log("🔄 Tentativa de reconexão manual");
             statusEl.innerText = "Reconectando...";
             retryBtn.style.display = "none";
+            clearTimeout(reconnectTimer);
+            reconnectTimer = null;
+            totalRetryCount = iceFailCount = 0;
+            relayOnly = false;
+            closeCurrentCall();
 
             if (!peer || peer.destroyed) {
                 initPeer();
-            } else if (peer.disconnected) {
-                peer.reconnect();
+            } else if (!peer.open || peer.disconnected) {
+                signaling.retry();
             } else {
                 connectToStream();
             }
         }
 
         // Inicia o Peer ao abrir a página
+        logDebug('FutStream conexao v2: diagnostico WebSocket e ICE');
         initPeer();
 
         function connectToStream() {
-            if (!peer || peer.destroyed || peer.disconnected) {
-                console.warn("⚠️ Peer não está pronto para conectar, tentando restabelecer...");
-                manualRetry();
-                return;
-            }
+            if (closingPage || !peer || peer.destroyed || !peer.open || peer.disconnected || currentCall) return;
+            clearTimeout(reconnectTimer);
+            reconnectTimer = null;
+            peer.options.config = getIceConfig();
 
             statusEl.innerText = "Conectando...";
             retryBtn.style.display = "none";
             unmuteNotice.style.display = "none";
             console.log("🔄 Initiating call to " + hostPeerId);
-
-            if (currentCall) {
-                console.log("🔌 Closing previous call");
-                currentCall.close();
-            }
 
             const canvas = document.createElement('canvas');
             canvas.width = 1;
@@ -406,6 +423,7 @@
             });
 
             if (!callObj) {
+                canvasStream.getTracks().forEach(track => track.stop());
                 console.error("❌ Call object creation failed!");
                 statusEl.innerText = "Falha ao conectar";
                 retryBtn.style.display = "inline-flex";
@@ -413,92 +431,66 @@
             }
 
             currentCall = callObj;
+            const pc = callObj.peerConnection;
+            let conn = null;
+            let disconnectTimeout = null;
 
-            callObj.peerConnection.onicecandidate = (event) => {
+            // PeerJS owns onicecandidate; replacing it prevents candidates from being sent.
+            pc.addEventListener('icecandidate', (event) => {
                 if (event.candidate) {
-                    logDebug(`🧊 ICE candidate: ${event.candidate.candidate.substring(0, 80)}...`);
+                    logDebug(`ICE candidate: ${event.candidate.type || 'unknown'} (${event.candidate.protocol || 'unknown'})`);
                 } else {
                     logDebug("🧊 ICE gathering complete");
                 }
-            };
+            });
 
-            callObj.peerConnection.onconnectionstatechange = () => {
-                const state = callObj.peerConnection.connectionState;
+            pc.addEventListener('connectionstatechange', () => {
+                if (currentCall !== callObj) return;
+                const state = pc.connectionState;
                 logDebug(`🔗 Connection State: ${state}`);
 
                 if (state === 'connected') {
+                    clearTimeout(connectionTimeout);
+                    clearTimeout(disconnectTimeout);
                     logDebug("✅ WebRTC connection established!");
                 } else if (state === 'failed') {
-                    logDebug("⚠️ Connection failed, attempting ICE restart...");
-                    try {
-                        callObj.peerConnection.restartIce();
-                    } catch (e) {
-                        logDebug(`⚠️ ICE restart failed: ${e.message}`);
-                        setTimeout(() => connectToStream(), 1000);
-                    }
+                    scheduleCallRetry('Falha na conexao de video');
                 } else if (state === 'disconnected') {
                     logDebug("⚠️ Desconectado temporariamente, aguardando...");
+                    clearTimeout(disconnectTimeout);
+                    disconnectTimeout = setTimeout(() => {
+                        if (currentCall === callObj && !hasConnectedMedia()) scheduleCallRetry('Conexao de video perdida');
+                    }, 12000);
                 } else if (state === 'closed') {
                     statusEl.innerText = "Stream encerrado";
                 }
-            };
+            });
 
-            callObj.peerConnection.oniceconnectionstatechange = () => {
-                const state = callObj.peerConnection.iceConnectionState;
+            pc.addEventListener('iceconnectionstatechange', () => {
+                if (currentCall !== callObj) return;
+                const state = pc.iceConnectionState;
                 logDebug(`🧊 ICE State: ${state}`);
 
                 if (state === 'failed') {
-                    iceFailCount++;
-                    logDebug(`🧊 ICE falhou (${iceFailCount}/${MAX_ICE_FAILS})`);
-
-                    if (iceFailCount >= MAX_ICE_FAILS && !relayOnly) {
-                        if (totalRetryCount >= MAX_TOTAL_RETRIES) {
-                            logDebug("❌ Múltiplas tentativas falharam, desistindo.");
-                            statusEl.innerText = "Não foi possível conectar";
-                            retryBtn.style.display = "inline-flex";
-                            iceFailCount = 0;
-                            return;
-                        }
-                        logDebug("⚠️ Múltiplas falhas ICE, ativando modo relay-only...");
-                        relayOnly = true;
-                        totalRetryCount++;
-                        iceFailCount = 0;
-                        statusEl.innerText = `Reconectando via relay (${totalRetryCount}/${MAX_TOTAL_RETRIES})...`;
-                        if (peer && !peer.destroyed) {
-                            try { peer.destroy(); } catch (e) {}
-                        }
-                        setTimeout(() => initPeer(), RETRY_COOLDOWN);
-                        return;
-                    }
-
-                    try {
-                        callObj.peerConnection.restartIce();
-                        statusEl.innerText = "Reconectando...";
-                    } catch (e) {
-                        logDebug(`⚠️ ICE restart falhou: ${e.message}`);
-                        statusEl.innerText = "Conexão perdida (ICE falhou)";
-                        retryBtn.style.display = "inline-flex";
-                    }
+                    scheduleCallRetry('Conexao de video falhou (ICE)');
                 } else if (state === 'disconnected') {
                     logDebug("⚠️ ICE desconectado temporariamente, aguardando...");
                 } else if (state === 'connected' || state === 'completed') {
+                    clearTimeout(connectionTimeout);
+                    clearTimeout(disconnectTimeout);
                     iceFailCount = 0;
                     totalRetryCount = 0;
                     relayOnly = false;
                     retryBtn.style.display = "none";
                 }
-            };
+            });
 
             const connectionTimeout = setTimeout(() => {
-                if (statusEl.innerText === "Conectando...") {
-                    statusEl.innerText = "Host não respondeu (Timeout)";
-                    retryBtn.style.display = "inline-flex";
-                    console.warn("⏱️ Connection timed out.");
-                }
-            }, 15000);
+                if (currentCall === callObj && !hasConnectedMedia()) scheduleCallRetry('Tempo esgotado ao conectar o video');
+            }, 20000);
 
             callObj.on('stream', (remoteStream) => {
-                clearTimeout(connectionTimeout);
+                if (currentCall !== callObj) return;
                 console.log("✅ Received remote stream!");
 
                 const audioTracks = remoteStream.getAudioTracks();
@@ -522,13 +514,16 @@
                     playPromise.then(() => {
                         console.log("✅ Video playing with audio");
                     }).catch(error => {
+                        if (currentCall !== callObj) return;
                         console.warn("⚠️ Autoplay with audio prevented:", error);
                         videoEl.muted = true;
                         videoEl.play().then(() => {
+                            if (currentCall !== callObj) return;
                             console.log("✅ Video playing (muted fallback)");
                             statusEl.innerText = "Ao Vivo 🔇";
                             unmuteNotice.style.display = "block";
                         }).catch(e => {
+                            if (currentCall !== callObj) return;
                             console.error("❌ Autoplay failed completely:", e);
                             statusEl.innerText = "Clique no vídeo para iniciar";
                         });
@@ -537,6 +532,7 @@
 
                 remoteStream.getTracks().forEach(track => {
                     track.onended = () => {
+                        if (currentCall !== callObj) return;
                         console.log(`⚠️ Track ended: ${track.kind}`);
                         statusEl.innerText = "Stream encerrado";
                     };
@@ -544,18 +540,25 @@
             });
 
             callObj.on('close', () => {
-                statusEl.innerText = "Stream encerrado";
+                clearTimeout(connectionTimeout);
+                clearTimeout(disconnectTimeout);
+                canvasStream.getTracks().forEach(track => track.stop());
+                if (conn) conn.close();
+                if (currentCall !== callObj) return;
+                currentCall = null;
+                scheduleCallRetry('Conexao de video encerrada');
                 console.log("🔌 Call closed");
             });
 
             callObj.on('error', (err) => {
+                if (currentCall !== callObj) return;
                 clearTimeout(connectionTimeout);
                 console.error("❌ Call Error:", err);
-                statusEl.innerText = "Erro na chamada";
-                retryBtn.style.display = "inline-flex";
+                scheduleCallRetry('Erro na chamada de video');
             });
 
-            const conn = peer.connect(hostPeerId);
+            conn = peer.connect(hostPeerId);
+            if (!conn) return;
             conn.on('open', () => {
                 console.log("✅ Data connection opened");
                 conn.send({
@@ -567,6 +570,14 @@
                 console.error("❌ Data connection error:", err);
             });
         }
+
+        window.addEventListener('pagehide', () => {
+            closingPage = true;
+            clearTimeout(reconnectTimer);
+            if (signaling) signaling.stop();
+            closeCurrentCall();
+            if (peer && !peer.destroyed) peer.destroy();
+        });
     </script>
 </body>
 </html>
