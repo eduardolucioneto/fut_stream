@@ -75,12 +75,12 @@
                 { urls: 'stun:stun.cloudflare.com:3478' },
                 { urls: 'stun:stun.relay.metered.ca:80' },
                 {
-                    urls: 'turn:turn.relay.metered.ca:80',
+                    urls: 'turn:turn.relay.metered.ca:3478?transport=udp',
                     username: 'openrelayproject',
                     credential: 'openrelayproject'
                 },
                 {
-                    urls: 'turn:turn.relay.metered.ca:443',
+                    urls: 'turn:turn.relay.metered.ca:3478?transport=tcp',
                     username: 'openrelayproject',
                     credential: 'openrelayproject'
                 },
