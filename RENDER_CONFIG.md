@@ -18,6 +18,11 @@ fut-stream.onrender.com
 ```
 (Substitua "fut-stream" pelo nome que você escolher para o seu web service)
 
+### CSRF_TRUSTED_ORIGINS (Opcional - Já possui padrão automático)
+```
+https://fut-stream.onrender.com
+```
+
 ### DATABASE_URL
 ```
 (Será preenchido automaticamente após criar o banco PostgreSQL no Render)

@@ -29,7 +29,30 @@ SECRET_KEY = config('SECRET_KEY', default='django-insecure-c#5@i2+k_h0p3u=mkh7$^
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = config('DEBUG', default=True, cast=bool)
 
-ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1', cast=Csv())
+ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1,.onrender.com,.vercel.app,.hf.space', cast=Csv())
+
+# CSRF Trusted Origins (Required for Django 4.0+ in production / HTTPS / reverse proxies)
+CSRF_TRUSTED_ORIGINS = config(
+    'CSRF_TRUSTED_ORIGINS',
+    default='https://*.onrender.com,https://*.vercel.app,https://*.hf.space,http://localhost:8000,http://127.0.0.1:8000,http://localhost:3000',
+    cast=Csv()
+)
+
+# Automatically register any host defined in ALLOWED_HOSTS as a trusted CSRF origin
+_csrf_origins = list(CSRF_TRUSTED_ORIGINS)
+for _host in ALLOWED_HOSTS:
+    _h = _host.strip()
+    if not _h or _h == '*':
+        continue
+    _domain = f"*.{_h[1:]}" if _h.startswith('.') else _h
+    for _scheme in ('https://', 'http://'):
+        _origin = f"{_scheme}{_domain}"
+        if _origin not in _csrf_origins:
+            _csrf_origins.append(_origin)
+CSRF_TRUSTED_ORIGINS = _csrf_origins
+
+# Support reverse proxy HTTPS headers (Render, Vercel, Cloudflare, Nginx, Railway, etc.)
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
 
 # Application definition
@@ -166,8 +189,9 @@ DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='noreply@toptraders.co
 # Security settings for production
 if not DEBUG:
     SECURE_SSL_REDIRECT = config('SECURE_SSL_REDIRECT', default=True, cast=bool)
-    SESSION_COOKIE_SECURE = True
-    CSRF_COOKIE_SECURE = True
+    SESSION_COOKIE_SECURE = config('SESSION_COOKIE_SECURE', default=True, cast=bool)
+    CSRF_COOKIE_SECURE = config('CSRF_COOKIE_SECURE', default=True, cast=bool)
     SECURE_BROWSER_XSS_FILTER = True
     SECURE_CONTENT_TYPE_NOSNIFF = True
     X_FRAME_OPTIONS = 'DENY'
+
