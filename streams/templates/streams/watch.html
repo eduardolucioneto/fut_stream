@@ -226,7 +226,10 @@
         let currentCall = null;
         let reconnectTimer = null;
         let iceFailCount = 0;
+        let totalRetryCount = 0;
         const MAX_ICE_FAILS = 2;
+        const MAX_TOTAL_RETRIES = 5;
+        const RETRY_COOLDOWN = 3000;
         let relayOnly = false;
 
         const iceServersConfig = [
@@ -411,14 +414,22 @@
                     console.warn(`🧊 ICE falhou (${iceFailCount}/${MAX_ICE_FAILS})`);
 
                     if (iceFailCount >= MAX_ICE_FAILS && !relayOnly) {
+                        if (totalRetryCount >= MAX_TOTAL_RETRIES) {
+                            console.error("❌ Múltiplas tentativas falharam, desistindo.");
+                            statusEl.innerText = "Não foi possível conectar";
+                            retryBtn.style.display = "inline-flex";
+                            iceFailCount = 0;
+                            return;
+                        }
                         console.warn("⚠️ Múltiplas falhas ICE, ativando modo relay-only...");
                         relayOnly = true;
-                        statusEl.innerText = "Reconectando via relay...";
+                        totalRetryCount++;
                         iceFailCount = 0;
+                        statusEl.innerText = `Reconectando via relay (${totalRetryCount}/${MAX_TOTAL_RETRIES})...`;
                         if (peer && !peer.destroyed) {
                             try { peer.destroy(); } catch (e) {}
                         }
-                        setTimeout(() => initPeer(), 500);
+                        setTimeout(() => initPeer(), RETRY_COOLDOWN);
                         return;
                     }
 
@@ -434,6 +445,8 @@
                     console.warn("⚠️ ICE desconectado temporariamente, aguardando...");
                 } else if (state === 'connected' || state === 'completed') {
                     iceFailCount = 0;
+                    totalRetryCount = 0;
+                    relayOnly = false;
                     retryBtn.style.display = "none";
                 }
             };
