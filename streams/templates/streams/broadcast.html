@@ -61,12 +61,7 @@
     const streamId = "{{ stream.id }}";
     const peerId = "futstream_host_" + streamId;
 
-    const peer = new Peer(peerId, {
-        debug: 1,
-        pingInterval: 5000,
-        config: {
-            'iceTransportPolicy': 'all',
-            'iceServers': [
+    const iceServersConfig = [
                 { urls: 'stun:stun.l.google.com:19302' },
                 { urls: 'stun:stun1.l.google.com:19302' },
                 { urls: 'stun:stun2.l.google.com:19302' },
@@ -89,7 +84,18 @@
                     username: 'openrelayproject',
                     credential: 'openrelayproject'
                 }
-            ]
+            ];
+
+    const peer = new Peer(peerId, {
+        host: '0.peerjs.com',
+        port: 443,
+        path: '/',
+        secure: true,
+        debug: 1,
+        pingInterval: 10000,
+        config: {
+            'iceTransportPolicy': 'all',
+            'iceServers': iceServersConfig
         }
     });
 
@@ -186,7 +192,11 @@
         console.warn("⚠️ Desconectado da rede de sinalização. Reconectando...");
         statusEl.innerText = "Reconectando rede...";
         if (!peer.destroyed) {
-            peer.reconnect();
+            setTimeout(() => {
+                if (!peer.destroyed && peer.disconnected) {
+                    peer.reconnect();
+                }
+            }, 3000);
         }
     });
 

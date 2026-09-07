@@ -286,6 +286,17 @@
                 'iceServers': iceServersConfig
             };
         }
+        function getPeerOptions() {
+            return {
+                host: '0.peerjs.com',
+                port: 443,
+                path: '/',
+                secure: true,
+                debug: 1,
+                pingInterval: 10000,
+                config: getIceConfig()
+            };
+        }
 
         function initPeer() {
             if (peer && !peer.destroyed) {
@@ -295,11 +306,7 @@
             const myPeerId = "futstream_viewer_" + Math.floor(Math.random() * 1000000);
             console.log("🚀 Inicializando Peer com ID:", myPeerId, "relayOnly:", relayOnly);
 
-            peer = new Peer(myPeerId, {
-                debug: 1,
-                pingInterval: 5000,
-                config: getIceConfig()
-            });
+            peer = new Peer(myPeerId, getPeerOptions());
 
             peer.on('open', (id) => {
                 console.log("✅ Conectado à rede PeerJS com ID:", id);
@@ -310,7 +317,12 @@
                 console.warn("⚠️ Desconectado do servidor de sinalização. Reconectando...");
                 statusEl.innerText = "Reconectando rede...";
                 if (peer && !peer.destroyed) {
-                    peer.reconnect();
+                    clearTimeout(reconnectTimer);
+                    reconnectTimer = setTimeout(() => {
+                        if (peer && !peer.destroyed && peer.disconnected) {
+                            peer.reconnect();
+                        }
+                    }, RETRY_COOLDOWN);
                 }
             });
 
@@ -331,7 +343,7 @@
                         } else {
                             initPeer();
                         }
-                    }, 3000);
+                    }, RETRY_COOLDOWN);
                 } else if (err.type === 'peer-unavailable') {
                     statusEl.innerText = "Transmissão ainda não iniciada ou offline";
                     clearTimeout(reconnectTimer);
