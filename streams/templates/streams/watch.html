@@ -225,6 +225,9 @@
         let peer = null;
         let currentCall = null;
         let reconnectTimer = null;
+        let iceFailCount = 0;
+        const MAX_ICE_FAILS = 2;
+        let relayOnly = false;
 
         const iceServersConfig = [
             { urls: 'stun:stun.l.google.com:19302' },
@@ -250,21 +253,31 @@
             }
         ];
 
+        function getIceConfig() {
+            if (relayOnly) {
+                return {
+                    'iceTransportPolicy': 'relay',
+                    'iceServers': iceServersConfig.filter(s => s.urls.startsWith('turn:'))
+                };
+            }
+            return {
+                'iceTransportPolicy': 'all',
+                'iceServers': iceServersConfig
+            };
+        }
+
         function initPeer() {
             if (peer && !peer.destroyed) {
                 try { peer.destroy(); } catch (e) {}
             }
 
             const myPeerId = "futstream_viewer_" + Math.floor(Math.random() * 1000000);
-            console.log("🚀 Inicializando Peer com ID:", myPeerId);
+            console.log("🚀 Inicializando Peer com ID:", myPeerId, "relayOnly:", relayOnly);
 
             peer = new Peer(myPeerId, {
                 debug: 1,
                 pingInterval: 5000,
-                config: {
-                    'iceTransportPolicy': 'all',
-                    'iceServers': iceServersConfig
-                }
+                config: getIceConfig()
             });
 
             peer.on('open', (id) => {
@@ -394,18 +407,33 @@
                 console.log("🧊 ICE State: " + state);
 
                 if (state === 'failed') {
-                    console.warn("🧊 ICE failed, attempting restart...");
+                    iceFailCount++;
+                    console.warn(`🧊 ICE falhou (${iceFailCount}/${MAX_ICE_FAILS})`);
+
+                    if (iceFailCount >= MAX_ICE_FAILS && !relayOnly) {
+                        console.warn("⚠️ Múltiplas falhas ICE, ativando modo relay-only...");
+                        relayOnly = true;
+                        statusEl.innerText = "Reconectando via relay...";
+                        iceFailCount = 0;
+                        if (peer && !peer.destroyed) {
+                            try { peer.destroy(); } catch (e) {}
+                        }
+                        setTimeout(() => initPeer(), 500);
+                        return;
+                    }
+
                     try {
                         callObj.peerConnection.restartIce();
                         statusEl.innerText = "Reconectando...";
                     } catch (e) {
-                        console.warn("⚠️ ICE restart failed, will retry connection:", e);
+                        console.warn("⚠️ ICE restart falhou:", e);
                         statusEl.innerText = "Conexão perdida (ICE falhou)";
                         retryBtn.style.display = "inline-flex";
                     }
                 } else if (state === 'disconnected') {
                     console.warn("⚠️ ICE desconectado temporariamente, aguardando...");
                 } else if (state === 'connected' || state === 'completed') {
+                    iceFailCount = 0;
                     retryBtn.style.display = "none";
                 }
             };
