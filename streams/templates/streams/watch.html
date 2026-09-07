@@ -226,17 +226,14 @@
         const peer = new Peer(myPeerId, {
             debug: 2,
             config: {
+                'iceTransportPolicy': 'all',
                 'iceServers': [
                     { urls: 'stun:stun.l.google.com:19302' },
                     { urls: 'stun:stun1.l.google.com:19302' },
                     { urls: 'stun:stun2.l.google.com:19302' },
+                    { urls: 'stun:stun3.l.google.com:19302' },
+                    { urls: 'stun:stun4.l.google.com:19302' },
                     { urls: 'stun:stun.cloudflare.com:3478' },
-                    { urls: 'stun:openrelay.metered.ca:80' },
-                    {
-                        urls: 'turn:openrelay.metered.ca:80',
-                        username: 'openrelayproject',
-                        credential: 'openrelayproject'
-                    },
                     {
                         urls: 'turn:openrelay.metered.ca:443',
                         username: 'openrelayproject',
@@ -244,6 +241,11 @@
                     },
                     {
                         urls: 'turn:openrelay.metered.ca:443?transport=tcp',
+                        username: 'openrelayproject',
+                        credential: 'openrelayproject'
+                    },
+                    {
+                        urls: 'turn:relay.metered.ca:443',
                         username: 'openrelayproject',
                         credential: 'openrelayproject'
                     }
@@ -308,10 +310,17 @@
                 if (state === 'connected') {
                     console.log("✅ WebRTC connection established!");
                 } else if (state === 'failed') {
-                    statusEl.innerText = "Conexão perdida";
-                    retryBtn.style.display = "inline-flex";
+                    console.warn("⚠️ Connection failed, attempting ICE restart...");
+                    try {
+                        callObj.peerConnection.restartIce();
+                    } catch (e) {
+                        console.warn("⚠️ ICE restart failed, will retry connection:", e);
+                        setTimeout(() => connectToStream(), 1000);
+                    }
                 } else if (state === 'disconnected') {
                     console.warn("⚠️ Desconectado temporariamente, aguardando...");
+                } else if (state === 'closed') {
+                    statusEl.innerText = "Stream encerrado";
                 }
             };
 
@@ -320,10 +329,19 @@
                 console.log("🧊 ICE State: " + state);
 
                 if (state === 'failed') {
-                    statusEl.innerText = "Conexão perdida (ICE falhou)";
-                    retryBtn.style.display = "inline-flex";
+                    console.warn("🧊 ICE failed, attempting restart...");
+                    try {
+                        callObj.peerConnection.restartIce();
+                        statusEl.innerText = "Reconectando...";
+                    } catch (e) {
+                        console.warn("⚠️ ICE restart failed, will retry connection:", e);
+                        statusEl.innerText = "Conexão perdida (ICE falhou)";
+                        retryBtn.style.display = "inline-flex";
+                    }
                 } else if (state === 'disconnected') {
                     console.warn("⚠️ ICE desconectado temporariamente, aguardando...");
+                } else if (state === 'connected' || state === 'completed') {
+                    retryBtn.style.display = "none";
                 }
             };
 
