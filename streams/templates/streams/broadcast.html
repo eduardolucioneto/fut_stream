@@ -56,13 +56,14 @@
     </div>
 </div>
 
-<script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
 <script>
     const streamId = "{{ stream.id }}";
     const peerId = "futstream_host_" + streamId;
 
     const peer = new Peer(peerId, {
-        debug: 3,
+        debug: 1,
+        pingInterval: 5000,
         config: {
             'iceTransportPolicy': 'all',
             'iceServers': [
@@ -173,12 +174,33 @@
 
     peer.on('open', (id) => {
         console.log("✅ Peer connected:", id);
-        statusEl.innerText = "Pronto para compartilhar";
+        if (localStream) {
+            statusEl.innerText = "Transmitindo ao vivo";
+        } else {
+            statusEl.innerText = "Pronto para compartilhar";
+        }
+    });
+
+    peer.on('disconnected', () => {
+        console.warn("⚠️ Desconectado da rede de sinalização. Reconectando...");
+        statusEl.innerText = "Reconectando rede...";
+        if (!peer.destroyed) {
+            peer.reconnect();
+        }
     });
 
     peer.on('error', (err) => {
-        console.error(err);
-        statusEl.innerText = "Error: " + err.type;
+        console.error("❌ Host Peer Error:", err);
+        if (err.type === 'network') {
+            statusEl.innerText = "Reconectando sinalização...";
+            setTimeout(() => {
+                if (peer && !peer.destroyed && peer.disconnected) {
+                    peer.reconnect();
+                }
+            }, 3000);
+            return;
+        }
+        statusEl.innerText = "Erro: " + err.type;
     });
 
     window.onload = function () {
