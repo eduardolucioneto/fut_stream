@@ -204,6 +204,8 @@
         <div id="unmuteNotice" class="audio-overlay" onclick="enableAudio()">
             🔇 {% trans "Clique aqui para ativar o áudio" %}
         </div>
+        <button id="debugToggle" style="position:absolute;top:10px;right:10px;z-index:100;background:rgba(0,0,0,0.7);color:#0f0;padding:6px 10px;border:none;border-radius:4px;cursor:pointer;font-size:0.75rem;" onclick="toggleDebug()">DEBUG</button>
+        <div id="debugPanel" style="display:none;position:absolute;bottom:10px;left:10px;right:10px;max-height:200px;overflow-y:auto;background:rgba(0,0,0,0.85);color:#0f0;font-family:monospace;font-size:0.7rem;padding:10px;border-radius:6px;z-index:100;"></div>
     </main>
 
     <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
@@ -215,6 +217,21 @@
         const retryBtn = document.getElementById('retryBtn');
         const videoEl = document.getElementById('remoteVideo');
         const unmuteNotice = document.getElementById('unmuteNotice');
+        const debugPanel = document.getElementById('debugPanel');
+        const debugToggle = document.getElementById('debugToggle');
+
+        function logDebug(msg) {
+            const time = new Date().toLocaleTimeString();
+            const line = document.createElement('div');
+            line.textContent = `[${time}] ${msg}`;
+            debugPanel.appendChild(line);
+            debugPanel.scrollTop = debugPanel.scrollHeight;
+            console.log(msg);
+        }
+
+        function toggleDebug() {
+            debugPanel.style.display = debugPanel.style.display === 'none' ? 'block' : 'none';
+        }
 
         function enableAudio() {
             videoEl.muted = false;
@@ -384,22 +401,30 @@
 
             currentCall = callObj;
 
+            callObj.peerConnection.onicecandidate = (event) => {
+                if (event.candidate) {
+                    logDebug(`🧊 ICE candidate: ${event.candidate.candidate.substring(0, 80)}...`);
+                } else {
+                    logDebug("🧊 ICE gathering complete");
+                }
+            };
+
             callObj.peerConnection.onconnectionstatechange = () => {
                 const state = callObj.peerConnection.connectionState;
-                console.log("🔗 Connection State: " + state);
+                logDebug(`🔗 Connection State: ${state}`);
 
                 if (state === 'connected') {
-                    console.log("✅ WebRTC connection established!");
+                    logDebug("✅ WebRTC connection established!");
                 } else if (state === 'failed') {
-                    console.warn("⚠️ Connection failed, attempting ICE restart...");
+                    logDebug("⚠️ Connection failed, attempting ICE restart...");
                     try {
                         callObj.peerConnection.restartIce();
                     } catch (e) {
-                        console.warn("⚠️ ICE restart failed, will retry connection:", e);
+                        logDebug(`⚠️ ICE restart failed: ${e.message}`);
                         setTimeout(() => connectToStream(), 1000);
                     }
                 } else if (state === 'disconnected') {
-                    console.warn("⚠️ Desconectado temporariamente, aguardando...");
+                    logDebug("⚠️ Desconectado temporariamente, aguardando...");
                 } else if (state === 'closed') {
                     statusEl.innerText = "Stream encerrado";
                 }
@@ -407,21 +432,21 @@
 
             callObj.peerConnection.oniceconnectionstatechange = () => {
                 const state = callObj.peerConnection.iceConnectionState;
-                console.log("🧊 ICE State: " + state);
+                logDebug(`🧊 ICE State: ${state}`);
 
                 if (state === 'failed') {
                     iceFailCount++;
-                    console.warn(`🧊 ICE falhou (${iceFailCount}/${MAX_ICE_FAILS})`);
+                    logDebug(`🧊 ICE falhou (${iceFailCount}/${MAX_ICE_FAILS})`);
 
                     if (iceFailCount >= MAX_ICE_FAILS && !relayOnly) {
                         if (totalRetryCount >= MAX_TOTAL_RETRIES) {
-                            console.error("❌ Múltiplas tentativas falharam, desistindo.");
+                            logDebug("❌ Múltiplas tentativas falharam, desistindo.");
                             statusEl.innerText = "Não foi possível conectar";
                             retryBtn.style.display = "inline-flex";
                             iceFailCount = 0;
                             return;
                         }
-                        console.warn("⚠️ Múltiplas falhas ICE, ativando modo relay-only...");
+                        logDebug("⚠️ Múltiplas falhas ICE, ativando modo relay-only...");
                         relayOnly = true;
                         totalRetryCount++;
                         iceFailCount = 0;
@@ -437,12 +462,12 @@
                         callObj.peerConnection.restartIce();
                         statusEl.innerText = "Reconectando...";
                     } catch (e) {
-                        console.warn("⚠️ ICE restart falhou:", e);
+                        logDebug(`⚠️ ICE restart falhou: ${e.message}`);
                         statusEl.innerText = "Conexão perdida (ICE falhou)";
                         retryBtn.style.display = "inline-flex";
                     }
                 } else if (state === 'disconnected') {
-                    console.warn("⚠️ ICE desconectado temporariamente, aguardando...");
+                    logDebug("⚠️ ICE desconectado temporariamente, aguardando...");
                 } else if (state === 'connected' || state === 'completed') {
                     iceFailCount = 0;
                     totalRetryCount = 0;
