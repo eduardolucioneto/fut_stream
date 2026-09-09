@@ -32,7 +32,8 @@ def message_list(request):
         messages_data = [{
             'user': msg.user.username, 
             'content': msg.content, 
-            'timestamp': msg.timestamp.strftime('%H:%M'),
+            'timestamp': timezone.localtime(msg.timestamp).strftime('%d/%m/%Y %H:%M'),
+            'iso_timestamp': msg.timestamp.isoformat(),
             'recipient': msg.recipient.username if msg.recipient else None,
             'is_private': msg.recipient is not None
         } for msg in messages]
