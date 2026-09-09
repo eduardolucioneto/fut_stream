@@ -204,7 +204,6 @@
         <div id="unmuteNotice" class="audio-overlay" onclick="enableAudio()">
             🔇 {% trans "Clique aqui para ativar o áudio" %}
         </div>
-        <button id="debugToggle" style="position:absolute;top:10px;right:10px;z-index:100;background:rgba(0,0,0,0.7);color:#0f0;padding:6px 10px;border:none;border-radius:4px;cursor:pointer;font-size:0.75rem;" onclick="toggleDebug()">DEBUG</button>
         <div id="debugPanel" style="display:none;position:absolute;bottom:10px;left:10px;right:10px;max-height:200px;overflow-y:auto;background:rgba(0,0,0,0.85);color:#0f0;font-family:monospace;font-size:0.7rem;padding:10px;border-radius:6px;z-index:100;"></div>
     </main>
 
@@ -215,16 +214,23 @@
         const videoEl = document.getElementById('remoteVideo');
         const unmuteNotice = document.getElementById('unmuteNotice');
         const debugPanel = document.getElementById('debugPanel');
+        if (new URLSearchParams(window.location.search).has('debug') && debugPanel) {
+            debugPanel.style.display = 'block';
+        }
         function logDebug(message) {
-            const line = document.createElement('div');
-            line.textContent = '[' + new Date().toLocaleTimeString() + '] ' + message;
-            debugPanel.appendChild(line);
-            if (debugPanel.children.length > 200) debugPanel.firstChild.remove();
-            debugPanel.scrollTop = debugPanel.scrollHeight;
+            if (debugPanel) {
+                const line = document.createElement('div');
+                line.textContent = '[' + new Date().toLocaleTimeString() + '] ' + message;
+                debugPanel.appendChild(line);
+                if (debugPanel.children.length > 200) debugPanel.firstChild.remove();
+                debugPanel.scrollTop = debugPanel.scrollHeight;
+            }
             console.log(message);
         }
         function toggleDebug() {
-            debugPanel.style.display = debugPanel.style.display === 'none' ? 'block' : 'none';
+            if (debugPanel) {
+                debugPanel.style.display = debugPanel.style.display === 'none' ? 'block' : 'none';
+            }
         }
         function enableAudio() {
             videoEl.muted = false;
