@@ -28,10 +28,10 @@ HTTP perdidas. Participantes sem heartbeat por tres minutos deixam de ser anunci
 ## Redes que precisam de TURN
 
 Sinalizacao HTTPS e transporte de video sao etapas diferentes. Redes que impedem
-conexao P2P ainda precisam de um TURN acessivel. A configuracao atual mantem o relay
-publico existente como padrao. Para usar seu servidor, configurar no Render:
+conexao P2P ainda precisam de um TURN acessivel. Sem as variaveis abaixo, somente STUN e usado.
+Crie credenciais TURN no seu provedor e configure no Render:
 
-- `STREAM_TURN_URLS`: URLs separadas por virgula, fornecidas pelo provedor.
+- `STREAM_TURN_URLS`: `turn:global.relay.metered.ca:80,turn:global.relay.metered.ca:80?transport=tcp,turn:global.relay.metered.ca:443,turns:global.relay.metered.ca:443?transport=tcp`
 - `STREAM_TURN_USERNAME`: usuario TURN.
 - `STREAM_TURN_CREDENTIAL`: credencial TURN.
 

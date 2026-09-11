@@ -174,17 +174,18 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 AUTH_USER_MODEL = 'accounts.User'
 
-# Signaling stays on this Django origin. Only media traversal uses STUN/TURN.
+# ICE servers for browser-to-browser streaming.
+# TURN is deliberately omitted unless real credentials are provided by the environment.
 STREAM_ICE_SERVERS = [
     {'urls': 'stun:stun.l.google.com:19302'},
     {'urls': 'stun:stun.cloudflare.com:3478'},
     {
-        'urls': config('STREAM_TURN_URLS', default='turn:turn.relay.metered.ca:3478?transport=udp,turn:turn.relay.metered.ca:443?transport=tcp', cast=Csv()),
-        'username': config('STREAM_TURN_USERNAME', default='openrelayproject'),
-        'credential': config('STREAM_TURN_CREDENTIAL', default='openrelayproject'),
+        'urls': config('STREAM_TURN_URLS', default='', cast=Csv()),
+        'username': config('STREAM_TURN_USERNAME', default=''),
+        'credential': config('STREAM_TURN_CREDENTIAL', default=''),
     },
 ]
-
+STREAM_ICE_SERVERS = [server for server in STREAM_ICE_SERVERS if server['urls']]
 LOGIN_URL = 'login'
 LOGIN_REDIRECT_URL = 'home'
 
