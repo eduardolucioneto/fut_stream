@@ -11,7 +11,7 @@ from schedule.models import GameEvent
 from .models import StreamParticipant, StreamRoom, StreamSignal
 
 
-@override_settings(SECURE_SSL_REDIRECT=False)
+@override_settings(SECURE_SSL_REDIRECT=False, LIVEKIT_URL='wss://livekit.test', LIVEKIT_API_KEY='testkey', LIVEKIT_API_SECRET='testsecret-with-at-least-32-characters')
 class SignalingTests(TestCase):
     def setUp(self):
         self.host = get_user_model().objects.create_user('host')
@@ -145,7 +145,7 @@ class SignalingTests(TestCase):
         self.client.force_login(self.viewer)
         response = self.client.get(reverse('watch_stream', args=[self.game.pk]))
         self.assertEqual(response.context['stream'].pk, latest.pk)
-        self.assertContains(response, reverse('stream_signal', args=[latest.pk]))
-        self.assertContains(response, 'simplepeer-9.11.1.min.js')
-        self.assertContains(response, 'csrfmiddlewaretoken')
-        self.assertNotContains(response, '0.peerjs.com')
+        self.assertContains(response, 'livekit-connection')
+        self.assertContains(response, 'livekit-client.umd.min.js')
+        self.assertNotContains(response, 'simplepeer-9.11.1.min.js')
+        self.assertNotContains(response, 'stream-connection')
