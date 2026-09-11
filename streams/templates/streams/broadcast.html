@@ -58,43 +58,162 @@
 
 {% include 'streams/_http_stream.html' %}
 <script>
-const statusEl = document.getElementById('status');
-const videoEl = document.getElementById('localVideo');
-const startShareContainer = document.getElementById('start-share-container');
-const restartShareContainer = document.getElementById('restart-share-container');
-const viewerList = document.getElementById('viewer-list');
-const controls = document.getElementById('controls');
-let localStream = null;
-let currentMicStream = null;
-const connection = new LiveKitStream(JSON.parse(document.getElementById('livekit-connection').textContent), {
-    status: message => statusEl.innerText = message,
-    participantConnected: updateViewers,
-    participantDisconnected: updateViewers,
-});
-function updateViewers() {
-    const list = document.getElementById('viewers'); list.replaceChildren();
-    const viewers = connection.room ? [...connection.room.remoteParticipants.values()] : [];
-    for (const viewer of viewers) { const item = document.createElement('li'); item.textContent = viewer.name || viewer.identity; list.appendChild(item); }
-    if (!viewers.length) { const item = document.createElement('li'); item.textContent = 'Aguardando espectadores...'; list.appendChild(item); }
-}
-connection.connect().then(() => { statusEl.innerText = 'Pronto para compartilhar'; }).catch(error => { statusEl.innerText = 'Erro ao conectar ao LiveKit'; console.error(error); });
-window.onload = () => { if (new URLSearchParams(location.search).get('auto_start') === 'true') startScreenShare(true); };
-window.addEventListener('pagehide', () => { connection.disconnect(); stopTracks(); });
-async function startScreenShare(isAutoStart = false) {
-    try {
-        startShareContainer.style.display = 'none'; restartShareContainer.style.display = 'none'; statusEl.innerText = 'Aguardando seleção...';
-        const displayStream = await navigator.mediaDevices.getDisplayMedia({ video: { cursor: 'always' }, systemAudio: 'include', audio: true });
-        try { currentMicStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } }); } catch (error) { console.warn('Microfone indisponível', error); }
-        await connection.publish(displayStream, currentMicStream?.getAudioTracks() || []);
-        localStream = displayStream; videoEl.srcObject = displayStream; videoEl.style.display = 'block'; viewerList.style.display = 'block'; controls.style.display = 'block'; updateViewers();
-        statusEl.innerText = 'Ao vivo';
-        displayStream.getVideoTracks()[0].onended = handleStreamEnd;
-    } catch (error) {
-        if (isAutoStart && (error.name === 'NotAllowedError' || error.name === 'SecurityError')) { startShareContainer.style.display = 'block'; statusEl.innerText = 'Pronto para compartilhar'; return; }
-        console.error(error); statusEl.innerText = 'Erro ao compartilhar'; restartShareContainer.style.display = 'block';
+    const statusEl = document.getElementById('status');
+    const videoEl = document.getElementById('localVideo');
+    const startShareContainer = document.getElementById('start-share-container');
+    const restartShareContainer = document.getElementById('restart-share-container');
+    const viewerList = document.getElementById('viewer-list');
+    const controls = document.getElementById('controls');
+    let localStream = null;
+    let currentMicStream = null;
+    const connection = new HttpStream(JSON.parse(document.getElementById('stream-connection').textContent), {
+        log: message => console.log(message),
+        status(message, connected) { if (!connected) statusEl.innerText = message; },
+        viewers(participants) {
+            const list = document.getElementById('viewers');
+            list.replaceChildren();
+            for (const viewer of participants) {
+                const item = document.createElement('li');
+                item.textContent = viewer.username;
+                list.appendChild(item);
+            }
+            if (!participants.length) {
+                const item = document.createElement('li');
+                item.textContent = 'Aguardando espectadores...';
+                list.appendChild(item);
+            }
+        }
+    });
+    connection.start();
+    statusEl.innerText = 'Pronto para compartilhar';
+    window.onload = () => {
+        if (new URLSearchParams(window.location.search).get('auto_start') === 'true') startScreenShare(true);
+    };
+    window.addEventListener('pagehide', () => {
+        connection.stop();
+        handleStreamEnd();
+    });
+    async function startScreenShare(isAutoStart = false) {
+        try {
+            // Hide start button, show loading
+            startShareContainer.style.display = 'none';
+            restartShareContainer.style.display = 'none';
+
+            statusEl.innerText = "Aguardando seleção...";
+            if (currentMicStream) {
+                currentMicStream.getTracks().forEach(track => track.stop());
+                currentMicStream = null;
+            }
+
+            console.log("🎬 Requesting screen share...");
+
+            const displayStream = await navigator.mediaDevices.getDisplayMedia({
+                video: {
+                    cursor: "always"
+                },
+                systemAudio: "include",
+                audio: {
+                    echoCancellation: false,
+                    noiseSuppression: false,
+                    sampleRate: 44100,
+                    channelCount: 2
+                }
+            });
+
+            console.log("✅ Display stream obtained");
+            console.log("Video tracks:", displayStream.getVideoTracks());
+            console.log("Audio tracks:", displayStream.getAudioTracks());
+
+            // Try to get microphone audio
+            let micStream = null;
+            try {
+                micStream = await navigator.mediaDevices.getUserMedia({
+                    audio: {
+                        echoCancellation: true,
+                        noiseSuppression: true,
+                        autoGainControl: true
+                    }
+                });
+                currentMicStream = micStream;
+                console.log("✅ Microphone stream obtained");
+            } catch (micErr) {
+                console.warn("Microphone not available:", micErr);
+            }
+
+            const audioTracks = displayStream.getAudioTracks();
+            if (micStream) {
+                const micTracks = micStream.getAudioTracks();
+                if (audioTracks.length === 0 && micTracks.length > 0) {
+                    displayStream.addTrack(micTracks[0]);
+                    console.log("Added microphone audio to stream");
+                } else if (audioTracks.length > 0 && micTracks.length > 0) {
+                    console.log("Both system and mic audio available");
+                }
+            }
+
+            const previousStream = localStream;
+            if (previousStream) previousStream.getTracks().forEach(track => track.stop());
+            localStream = displayStream;
+            connection.setStream(displayStream);
+            videoEl.srcObject = displayStream;
+            videoEl.style.display = 'block';
+            viewerList.style.display = 'block';
+            controls.style.display = 'block';
+
+            const hasAudio = displayStream.getAudioTracks().length > 0;
+            statusEl.innerText = `Broadcasting (Live) ${hasAudio ? '🔊 Com Áudio' : '🔇 Sem Áudio'}`;
+
+            displayStream.getVideoTracks()[0].onended = () => {
+                console.log("⚠️ Video track ended");
+                if (localStream === displayStream) handleStreamEnd();
+            };
+
+        } catch (err) {
+            console.error("Error sharing screen:", err);
+
+            // Handle auto-start block silently
+            if (isAutoStart && (err.name === 'NotAllowedError' || err.name === 'SecurityError' || err.message.includes('transient activation'))) {
+                console.warn("Auto-start blocked. User interaction required.");
+                startShareContainer.style.display = 'block';
+                statusEl.innerText = "Pronto para compartilhar";
+                return;
+            }
+
+            statusEl.innerText = "Erro ao compartilhar";
+
+            let errorMsg = `Erro: ${err.name}`;
+
+            if (err.name === 'NotAllowedError') {
+                errorMsg = "Você cancelou o compartilhamento ou negou a permissão.";
+            } else if (err.name === 'NotFoundError') {
+                errorMsg = "Nenhuma tela disponível para compartilhar.";
+            }
+
+            alert(errorMsg);
+            restartShareContainer.style.display = 'block';
+        }
     }
-}
-function stopTracks() { localStream?.getTracks().forEach(track => track.stop()); currentMicStream?.getTracks().forEach(track => track.stop()); localStream = null; currentMicStream = null; }
-async function handleStreamEnd() { await connection.unpublish(); stopTracks(); videoEl.srcObject = null; videoEl.style.display = 'none'; statusEl.innerText = 'Stream encerrado'; restartShareContainer.style.display = 'block'; }
+
+    function handleStreamEnd() {
+        connection.setStream(null);
+        statusEl.innerText = "Stream encerrado";
+
+        if (localStream) {
+            localStream.getTracks().forEach(track => track.stop());
+            localStream = null;
+        }
+
+        if (currentMicStream) {
+            currentMicStream.getTracks().forEach(track => track.stop());
+            currentMicStream = null;
+        }
+
+        videoEl.srcObject = null;
+        videoEl.style.display = 'none';
+
+        // Show restart button
+        restartShareContainer.style.display = 'block';
+    }
+
 </script>
 {% endblock %}

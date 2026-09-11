@@ -209,26 +209,74 @@
 
 {% include 'streams/_http_stream.html' %}
     <script>
-const statusEl = document.getElementById('status');
-const retryBtn = document.getElementById('retryBtn');
-const videoEl = document.getElementById('remoteVideo');
-const unmuteNotice = document.getElementById('unmuteNotice');
-let attachedVideoTrack = null;
-const connection = new LiveKitStream(JSON.parse(document.getElementById('livekit-connection').textContent), {
-    status(message) { statusEl.innerText = message; },
-    trackSubscribed(track) {
-        if (track.kind === LivekitClient.Track.Kind.Video) {
-            attachedVideoTrack?.detach(videoEl); attachedVideoTrack = track; track.attach(videoEl); videoEl.play().catch(() => {}); statusEl.innerText = 'Ao vivo'; retryBtn.style.display = 'none';
-        } else if (track.kind === LivekitClient.Track.Kind.Audio) {
-            const audio = track.attach(); audio.autoplay = true; document.body.appendChild(audio);
+        const statusEl = document.getElementById('status');
+        const retryBtn = document.getElementById('retryBtn');
+        const videoEl = document.getElementById('remoteVideo');
+        const unmuteNotice = document.getElementById('unmuteNotice');
+        const debugPanel = document.getElementById('debugPanel');
+        if (new URLSearchParams(window.location.search).has('debug') && debugPanel) {
+            debugPanel.style.display = 'block';
         }
-    },
-    trackUnsubscribed(track) { track.detach(); if (track === attachedVideoTrack) { attachedVideoTrack = null; statusEl.innerText = 'Transmissão interrompida'; retryBtn.style.display = 'inline-flex'; } },
-});
-function enableAudio() { videoEl.muted = false; videoEl.play().then(() => unmuteNotice.style.display = 'none').catch(console.error); }
-function manualRetry() { retryBtn.style.display = 'none'; statusEl.innerText = 'Reconectando...'; connection.disconnect().then(() => connection.connect()).catch(error => { console.error(error); retryBtn.style.display = 'inline-flex'; }); }
-window.addEventListener('pagehide', () => connection.disconnect());
-connection.connect().then(() => { statusEl.innerText = 'Aguardando transmissor...'; }).catch(error => { console.error(error); statusEl.innerText = 'Não foi possível conectar ao LiveKit'; retryBtn.style.display = 'inline-flex'; });
-</script>
+        function logDebug(message) {
+            if (debugPanel) {
+                const line = document.createElement('div');
+                line.textContent = '[' + new Date().toLocaleTimeString() + '] ' + message;
+                debugPanel.appendChild(line);
+                if (debugPanel.children.length > 200) debugPanel.firstChild.remove();
+                debugPanel.scrollTop = debugPanel.scrollHeight;
+            }
+            console.log(message);
+        }
+        function toggleDebug() {
+            if (debugPanel) {
+                debugPanel.style.display = debugPanel.style.display === 'none' ? 'block' : 'none';
+            }
+        }
+        function enableAudio() {
+            videoEl.muted = false;
+            videoEl.play().then(() => { unmuteNotice.style.display = 'none'; }).catch(logDebug);
+        }
+        const connection = new HttpStream(JSON.parse(document.getElementById('stream-connection').textContent), {
+            log: logDebug,
+            status(message, connected) {
+                if (connected) return;
+                statusEl.innerText = message;
+                retryBtn.style.display = 'inline-flex';
+            },
+            async stream(stream) {
+                videoEl.srcObject = stream;
+                statusEl.innerText = 'Carregando video...';
+                try {
+                    await videoEl.play();
+                } catch (error) {
+                    if (videoEl.srcObject !== stream) return;
+                    videoEl.muted = true;
+                    try {
+                        await videoEl.play();
+                        if (videoEl.srcObject === stream && stream.getAudioTracks().length) unmuteNotice.style.display = 'block';
+                    } catch (mutedError) {
+                        if (videoEl.srcObject === stream) statusEl.innerText = 'Clique no video para iniciar';
+                    }
+                }
+                stream.getVideoTracks().forEach(track => track.addEventListener('ended', () => {
+                    if (videoEl.srcObject === stream) {
+                        statusEl.innerText = 'Transmissao interrompida';
+                        retryBtn.style.display = 'inline-flex';
+                    }
+                }));
+            }
+        });
+        function manualRetry() {
+            statusEl.innerText = 'Reconectando...';
+            retryBtn.style.display = 'none';
+            connection.retry();
+        }
+        videoEl.addEventListener('playing', () => {
+            statusEl.innerText = 'Ao vivo';
+            retryBtn.style.display = 'none';
+        });
+        window.addEventListener('pagehide', () => connection.stop());
+        connection.start();
+    </script>
 </body>
 </html>

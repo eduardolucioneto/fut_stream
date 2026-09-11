@@ -1,4 +1,5 @@
 {% load static %}
-{{ livekit_connection|json_script:'livekit-connection' }}
-<script src="https://cdn.jsdelivr.net/npm/livekit-client/dist/livekit-client.umd.min.js" crossorigin="anonymous"></script>
-<script src="{% static 'streams/livekit-stream.js' %}?v=1"></script>
+{{ stream_connection|json_script:'stream-connection' }}
+<div hidden>{% csrf_token %}</div>
+<script src="{% static 'streams/vendor/simplepeer-9.11.1.min.js' %}"></script>
+<script src="{% static 'streams/http-stream.js' %}?v=3"></script>

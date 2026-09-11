@@ -7,43 +7,15 @@ from django.utils import timezone
 from django.conf import settings
 from django.urls import reverse
 from django.http import Http404
-from django.core.exceptions import ImproperlyConfigured
-from datetime import timedelta
-from uuid import uuid4
 
 
-def livekit_connection_context(stream, request, role):
-    """Create a least-privilege LiveKit join token for this page."""
-    required = ('LIVEKIT_URL', 'LIVEKIT_API_KEY', 'LIVEKIT_API_SECRET')
-    if not all(getattr(settings, name, '') for name in required):
-        raise ImproperlyConfigured('Configure LIVEKIT_URL, LIVEKIT_API_KEY and LIVEKIT_API_SECRET.')
-    try:
-        from livekit import api
-    except ImportError as error:
-        raise ImproperlyConfigured('The livekit-api package is required for streaming.') from error
-
-    host = role == 'host'
-    grants = api.VideoGrants(
-        room_join=True,
-        room=f'meusports-stream-{stream.pk}',
-        can_publish=host,
-        can_subscribe=True,
-        can_publish_data=False,
-        can_publish_sources=(['screen_share', 'screen_share_audio', 'microphone'] if host else None),
-    )
-    token = (
-        api.AccessToken(settings.LIVEKIT_API_KEY, settings.LIVEKIT_API_SECRET)
-        .with_identity(f'{role}-{request.user.pk}-{uuid4().hex}')
-        .with_name(request.user.username)
-        .with_ttl(timedelta(hours=settings.LIVEKIT_TOKEN_TTL_HOURS))
-        .with_grants(grants)
-        .to_jwt()
-    )
-    return {'stream': stream, 'livekit_connection': {
-        'url': settings.LIVEKIT_URL,
-        'token': token,
+def connection_context(stream, role):
+    return {'stream': stream, 'stream_connection': {
+        'endpoint': reverse('stream_signal', args=[stream.pk]),
         'role': role,
+        'iceServers': settings.STREAM_ICE_SERVERS,
     }}
+
 @login_required
 def start_stream(request):
     # allow admin users (staff/superuser) to create/start streams too
@@ -108,7 +80,7 @@ def start_broadcast(request, game_id):
 @login_required
 def broadcast_room(request, stream_id):
     stream = get_object_or_404(StreamRoom, id=stream_id, host=request.user)
-    return render(request, 'streams/broadcast.html', livekit_connection_context(stream, request, 'host'))
+    return render(request, 'streams/broadcast.html', connection_context(stream, 'host'))
 
 @login_required
 def watch_stream(request, game_id):
@@ -120,7 +92,7 @@ def watch_stream(request, game_id):
     stream = StreamRoom.objects.filter(game__id=game_id, is_live=True).order_by('-started_at', '-pk').first()
     if stream is None:
         raise Http404('Transmissao indisponivel.')
-    return render(request, 'streams/watch.html', livekit_connection_context(stream, request, 'viewer'))
+    return render(request, 'streams/watch.html', connection_context(stream, 'viewer'))
 
 @login_required
 def stop_stream(request, stream_id):
